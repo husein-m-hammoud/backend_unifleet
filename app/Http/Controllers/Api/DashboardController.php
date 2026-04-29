@@ -23,12 +23,13 @@ class DashboardController extends Controller
         $vehicleIds = $user->vehicleQuery()->pluck('id');
         $today      = Carbon::today();
 
-        // Live status counts from the latest position per vehicle
+        // Live status counts — one row per vehicle (latest valid GPS), done at DB level
         $latestPositions = VehiclePosition::whereIn('vehicle_id', $vehicleIds)
-            ->select('vehicle_id', 'ignition_status', 'speed', 'time')
+            ->where('lat', '!=', 0)
+            ->select(\DB::raw('DISTINCT ON (vehicle_id) vehicle_id'), 'ignition_status', 'speed', 'time')
+            ->orderBy('vehicle_id')
             ->orderByDesc('time')
-            ->get()
-            ->unique('vehicle_id');
+            ->get();
 
         $movingCount  = $latestPositions->where('speed', '>', 0)->count();
         $idlingCount  = $latestPositions->where('ignition_status', 'IgnitionOn')

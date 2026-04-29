@@ -19,9 +19,9 @@ class DscoApiService
     // Transport
     // -------------------------------------------------------------------------
 
-    private function post(string $endpoint, array $body = []): mixed
+    private function post(string $endpoint, array $body = [], int $timeoutSeconds = 30): mixed
     {
-        $response = $this->request('post', $endpoint, $body);
+        $response = $this->request('post', $endpoint, $body, $timeoutSeconds);
         return $response->json('result');
     }
 
@@ -31,7 +31,7 @@ class DscoApiService
         return $response->json('result');
     }
 
-    private function request(string $method, string $endpoint, array $data = [])
+    private function request(string $method, string $endpoint, array $data = [], int $timeoutSeconds = 30)
     {
         $token = $this->auth->getToken();
 
@@ -40,10 +40,12 @@ class DscoApiService
         // so cast to object when data is empty.
         $body = empty($data) ? new \stdClass() : $data;
 
-        $http = Http::asJson()->withHeaders([
-            'Authorization' => "Bearer {$token}",
-            'Accept'        => 'application/json',
-        ]);
+        $http = Http::asJson()
+            ->timeout($timeoutSeconds)
+            ->withHeaders([
+                'Authorization' => "Bearer {$token}",
+                'Accept'        => 'application/json',
+            ]);
 
         $response = match ($method) {
             'post' => $http->post("{$this->baseUrl}/{$endpoint}", $body),
@@ -54,10 +56,12 @@ class DscoApiService
         if ($response->status() === 401) {
             $this->auth->forgetToken();
             $token = $this->auth->getToken();
-            $http  = Http::asJson()->withHeaders([
-                'Authorization' => "Bearer {$token}",
-                'Accept'        => 'application/json',
-            ]);
+            $http  = Http::asJson()
+                ->timeout($timeoutSeconds)
+                ->withHeaders([
+                    'Authorization' => "Bearer {$token}",
+                    'Accept'        => 'application/json',
+                ]);
             $response = match ($method) {
                 'post' => $http->post("{$this->baseUrl}/{$endpoint}", $body),
                 'get'  => $http->get("{$this->baseUrl}/{$endpoint}", $data),
@@ -217,6 +221,23 @@ class DscoApiService
     // -------------------------------------------------------------------------
     // Legacy / Other (kept for future use)
     // -------------------------------------------------------------------------
+
+    /**
+     * POST /api/v2/vehicle/positions
+     * GPS position history for a single vehicle over a date range.
+     *
+     * @param  int        $vehicleId  DSCO vehicle ID
+     * @param  float      $startDate  Unix timestamp
+     * @param  float      $endDate    Unix timestamp
+     */
+    public function getVehiclePositions(int $vehicleId, float $startDate, float $endDate, int $timeoutSeconds = 120): array
+    {
+        return $this->post('api/v2/vehicle/positions', [
+            'vehicleId' => $vehicleId,
+            'startDate' => $startDate,
+            'endDate'   => $endDate,
+        ], $timeoutSeconds) ?? [];
+    }
 
     /** POST /api/v2/vehicle/states  (bulk filter-based state query) */
     public function getVehicleStates(array $filter = []): array

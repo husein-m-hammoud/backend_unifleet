@@ -22,7 +22,9 @@ use Illuminate\Support\Facades\Log;
 
 class DscoPollCommand extends Command
 {
-    protected $signature   = 'dsco:poll {--force : Ignore interval check and run immediately}';
+    protected $signature   = 'dsco:poll
+                                {--force    : Ignore interval check and run immediately}
+                                {--backfill : Fetch full position history from DSCO and fill vehicle_positions}';
     protected $description = 'Poll DSCO API and sync data into the database';
 
     // Cache keys
@@ -50,6 +52,10 @@ class DscoPollCommand extends Command
             $this->syncVehicles();
             $this->syncLiveState();
             $this->syncTripsAndTelemetry();
+
+            if ($this->option('backfill')) {
+                $this->backfillPositions();
+            }
         } catch (\Throwable $e) {
             Log::error('[DSCO] Poll failed: ' . $e->getMessage(), ['exception' => $e]);
             $this->error('[DSCO] Poll failed: ' . $e->getMessage());
@@ -396,14 +402,22 @@ class DscoPollCommand extends Command
                         ->value('id');
                 }
 
+                $lat = $state['position']['lat'] ?? 0;
+                $lon = $state['position']['lon'] ?? 0;
+
+                // Skip positions with no GPS fix — don't pollute the table with (0,0) rows
+                if ((float) $lat === 0.0 && (float) $lon === 0.0) {
+                    continue;
+                }
+
                 $inserts[] = [
                     'time'            => isset($state['date'])
                         ? Carbon::createFromTimestamp($state['date'])
                         : $now,
                     'vehicle_id'      => $vehicle->id,
                     'driver_id'       => $driverId,
-                    'lat'             => $state['position']['lat'] ?? 0,
-                    'lon'             => $state['position']['lon'] ?? 0,
+                    'lat'             => $lat,
+                    'lon'             => $lon,
                     'alt'             => $state['position']['alt'] ?? 0,
                     'speed'           => $state['speed'] ?? 0,
                     'heading'         => $state['heading'] ?? 0,
@@ -571,6 +585,125 @@ class DscoPollCommand extends Command
             VehicleWeightLog::insert($inserts);
         } catch (\Throwable $e) {
             Log::warning("[DSCO] Weight data failed for vehicle {$vehicle->dsco_vehicle_id}: " . $e->getMessage());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Backfill — position history from DSCO api/v2/vehicle/positions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Fetch full GPS track history for every active vehicle and store in
+     * vehicle_positions, skipping records that already exist.
+     *
+     * Run with:  php artisan dsco:poll --backfill [--force]
+     *
+     * Controlled by env:
+     *   DSCO_BACKFILL_DAYS=7  (how many days of history to pull, default 7)
+     */
+    private function backfillPositions(): void
+    {
+        $days      = (int) env('DSCO_BACKFILL_DAYS', 7);
+        $startDate = (float) now()->subDays($days)->timestamp;
+        $endDate   = (float) now()->timestamp;
+
+        $this->info("[DSCO] Backfilling position history for the last {$days} days...");
+
+        $vehicles = Vehicle::active()->get();
+
+        foreach ($vehicles as $vehicle) {
+            $this->backfillVehiclePositions($vehicle, $startDate, $endDate);
+        }
+
+        $this->info('[DSCO] Position backfill complete.');
+    }
+
+    private function backfillVehiclePositions(Vehicle $vehicle, float $startDate, float $endDate): void
+    {
+        // Pre-load all existing timestamps in the window for O(1) dedup
+        $existingTimestamps = VehiclePosition::where('vehicle_id', $vehicle->id)
+            ->whereBetween('time', [
+                Carbon::createFromTimestamp($startDate),
+                Carbon::createFromTimestamp($endDate),
+            ])
+            ->pluck('time')
+            ->map(fn ($t) => (int) Carbon::parse($t)->timestamp)
+            ->flip()
+            ->all();
+
+        $totalInserted = 0;
+
+        // Iterate one day at a time so no single DSCO request returns a huge payload
+        $dayStart = $startDate;
+        while ($dayStart < $endDate) {
+            $dayEnd = min($dayStart + 86400, $endDate);
+
+            try {
+                $rawPositions = $this->dsco->getVehiclePositions(
+                    $vehicle->dsco_vehicle_id,
+                    $dayStart,
+                    $dayEnd,
+                    120  // 2-minute timeout per day-chunk
+                );
+            } catch (\Throwable $e) {
+                Log::warning("[DSCO] Position backfill chunk failed for vehicle {$vehicle->dsco_vehicle_id} " .
+                    "(day " . date('Y-m-d', (int) $dayStart) . "): " . $e->getMessage());
+                $this->warn("[DSCO] Skipping chunk for {$vehicle->plate_no} on " .
+                    date('Y-m-d', (int) $dayStart) . ": " . $e->getMessage());
+                $dayStart = $dayEnd;
+                continue;
+            }
+
+            if (empty($rawPositions)) {
+                $dayStart = $dayEnd;
+                continue;
+            }
+
+            $inserts = [];
+            foreach ($rawPositions as $pos) {
+                $posTimestamp = (int) ($pos['date'] ?? 0);
+
+                if ($posTimestamp === 0) {
+                    continue;
+                }
+
+                if (isset($existingTimestamps[$posTimestamp])) {
+                    continue;
+                }
+
+                $inserts[] = [
+                    'time'            => Carbon::createFromTimestamp($posTimestamp),
+                    'vehicle_id'      => $vehicle->id,
+                    'driver_id'       => null,
+                    'lat'             => $pos['lat'] ?? 0,
+                    'lon'             => $pos['lon'] ?? 0,
+                    'alt'             => $pos['alt'] ?? 0,
+                    'speed'           => $pos['speed'] ?? 0,
+                    'heading'         => $pos['heading'] ?? 0,
+                    'ignition_status' => $pos['event']['code'] ?? null,
+                    'odometer'        => null,
+                    'dsco_event_id'   => $pos['event']['id'] ?? null,
+                    'event_name'      => $pos['event']['name'] ?? null,
+                    'event_code'      => $pos['event']['code'] ?? null,
+                ];
+
+                $existingTimestamps[$posTimestamp] = true;
+            }
+
+            if (! empty($inserts)) {
+                foreach (array_chunk($inserts, 500) as $chunk) {
+                    VehiclePosition::insert($chunk);
+                }
+                $totalInserted += count($inserts);
+            }
+
+            $dayStart = $dayEnd;
+        }
+
+        if ($totalInserted === 0) {
+            $this->line("[DSCO] No new positions for {$vehicle->plate_no} (already up-to-date).");
+        } else {
+            $this->line("[DSCO] Backfilled {$totalInserted} positions for {$vehicle->plate_no}.");
         }
     }
 }

@@ -2,7 +2,7 @@
 ## Project Memory for Claude Code (VS Code)
 
 > Auto-loaded by Claude Code. Contains all project context, decisions, scope, and API reference.
-> Company: Cedars Technology | Client: UNIMAC | Last updated: April 2026
+> Company: Cedars Technology | Client: UNIMAC | Last updated: April 2026 (session 3)
 
 ---
 
@@ -388,9 +388,10 @@ File: `app/Console/Commands/DscoPollCommand.php`
 1. **Interval guard** — checks `DSCO_POLL_INTERVAL_MINUTES` (.env, default 2) using a cache key. Exits early if interval hasn't elapsed. Use `--force` flag to bypass.
 2. **Sync reference data** — sites → categories → geofences → drivers → vehicles (upsert + soft-disable missing)
 3. **Track driver changes** — if a vehicle's driver changed since last poll, closes the old `vehicle_driver_assignments` row and opens a new one
-4. **Live state** — calls `vehicle/last-state` in chunks of 50 → inserts one `vehicle_positions` row per vehicle
+4. **Live state** — calls `vehicle/last-state` in chunks of 50 → inserts one `vehicle_positions` row per vehicle. **Skips rows with `lat=0, lon=0`** (DSCO returns 0,0 for offline/no-GPS vehicles — storing these floods the DB and breaks queries)
 5. **Per-vehicle telemetry** — for each active vehicle: trips, fuel, speed, weight (all since `dsco_last_sync_timestamp` cache key, fallback to `DSCO_LOOKBACK_HOURS`)
-6. **Updates cache** — stores `dsco_last_poll_ran_at` and `dsco_last_sync_timestamp` for next cycle
+6. **Backfill** (`--backfill` flag) — fetches GPS track history from `api/v2/vehicle/positions` **day-by-day** (86400s chunks, 120s timeout per chunk) to avoid DSCO response size timeout. Controlled by `DSCO_BACKFILL_DAYS` env (default 7).
+7. **Updates cache** — stores `dsco_last_poll_ran_at` and `dsco_last_sync_timestamp` for next cycle
 
 ### Scheduler
 Registered in `routes/console.php`:
@@ -481,32 +482,34 @@ DSCO_LOOKBACK_HOURS=24         # fallback window when no prior sync timestamp
 
 ### Done (April 2026)
 - [x] Scaffold Laravel project + DscoApiService + DscoAuthService
-- [x] All 14 database migrations (sites, categories, geofences, drivers, vehicles, vehicle_driver_assignments, vehicle_positions, vehicle_events, vehicle_fuel_logs, vehicle_speed_logs, vehicle_weight_logs, trips, alerts, reports)
+- [x] All 14 database migrations
 - [x] All Eloquent models with relations and scopeActive()
 - [x] `dsco:poll` artisan command — full sync pipeline with interval guard + soft-disable
+- [x] `dsco:poll --backfill` — day-by-day position history fetch (120s timeout/chunk, dedup by timestamp)
 - [x] Scheduler registered in routes/console.php
-- [x] Laravel Sanctum installed (`composer require laravel/sanctum`)
-- [x] Auth migrations: `add_dsco_fields_to_users_table` (dsco_username, dsco_accessible_vehicle_ids jsonb, password nullable) + `create_dsco_user_tokens_table` (per-user encrypted DSCO tokens)
-- [x] `DscoUserToken` model — encrypted casts for access_token + refresh_token, `expiresWithin()` / `isExpired()` helpers
-- [x] `User` model updated — HasApiTokens, dsco_accessible_vehicle_ids cast as array, `vehicleQuery()` method
-- [x] `DscoUserAuthService` — login (DSCO OAuth2 → Sanctum token), `getValidAccessToken()` (refresh if expiring within 60s), `fetchAccessibleVehicleIds()`
+- [x] Laravel Sanctum + auth flow (DSCO OAuth2 → Sanctum token)
 - [x] 6 API controllers: AuthController, VehicleController, DriverController, GeofenceController, AlertController, DashboardController
 - [x] `RefreshDscoToken` middleware — silently refreshes DSCO token on every authenticated request
-- [x] `routes/api.php` — 15 routes (public: login; protected: logout, me, dashboard, vehicles, drivers, geofences, alerts)
-- [x] `config/cors.php` — allows localhost:8080 + localhost:3000, supports_credentials: true
-- [x] `bootstrap/app.php` — API routes, HandleCors middleware, statefulApi()
-- [x] Fixed empty JSON body bug: PHP `[]` → DSCO server error; fix: `new \stdClass()` for empty bodies so it encodes as `{}`
-- [x] Smoke tested: login with bad DSCO credentials returns 401; `php artisan route:list --path=api` shows all 15 routes
+- [x] `config/cors.php` — allows localhost:8089 (Vite dev server)
+- [x] Fixed empty JSON body bug (`[]` → `new \stdClass()` for DSCO API)
+- [x] **Fixed OOM in `VehicleController::live()`** — replaced `->get()->unique('vehicle_id')` with `DISTINCT ON (vehicle_id)` PostgreSQL query; also filters `lat != 0` so (0,0) rows don't pollute the live map
+- [x] **Fixed OOM in `DashboardController::index()`** — same DISTINCT ON fix
+- [x] **Fixed `positions()` endpoint** — added `where('lat', '!=', 0)` filter before limit so valid GPS rows are never cut off by the 2000-row limit
+- [x] **Fixed live poll storing (0,0) rows** — `syncLiveState()` now skips insert when `lat=0 && lon=0`
+- [x] **`DscoApiService::post()`** — accepts optional `$timeoutSeconds` param (default 30); `getVehiclePositions()` defaults to 120s
+
+### Critical DB notes
+- `vehicle_positions` has ~92k rows as of April 2026; ~91k have `lat=0` (stored before the fix). All queries now filter `where lat != 0` — these rows are harmless but waste space. Can be cleaned with `DELETE FROM vehicle_positions WHERE lat = 0` on production.
+- DSCO `vehicle/last-state` returns `lat=0, lon=0` for offline/parked vehicles. Do NOT store these.
+- DSCO `api/v2/vehicle/positions` backfill works per-day; one API call per vehicle per day. Some vehicles return large payloads — 120s timeout per chunk is sufficient.
 
 ### Still Needed
-- [ ] Get DSCO API base URL + auth token from client → fill .env
 - [ ] Run `php artisan migrate` on Alibaba Cloud RDS
 - [ ] Run `SELECT create_hypertable(...)` for time-series tables on TimescaleDB
 - [ ] Add crontab entry on server: `* * * * * php artisan schedule:run`
 - [ ] Confirm Twilio account + Lebanon SMS support
 - [ ] Define idling threshold (minutes) with client → Phase 2 alert engine
 - [ ] Define geofence alert rules (which zones are "authorized") → Phase 2
-- [ ] Wire React/Vite frontend (`../unifleet`) to these API endpoints — auth context, API client, Google Maps live tracking map → Phase 5
 - [ ] Add production frontend URL to `config/cors.php` allowed_origins when deploying
 - [ ] Plan mobile app tech (React Native? Flutter?) → Phase 5
 - [ ] Set up Claude API key in Laravel `.env` → Phase 3 reports

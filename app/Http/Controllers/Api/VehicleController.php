@@ -33,13 +33,15 @@ class VehicleController extends Controller
         $user       = $request->user();
         $vehicleIds = $request->user()->vehicleQuery()->pluck('id');
 
-        // Get the most recent position row for each vehicle
+        // Get the most recent VALID position (lat != 0) per vehicle using DISTINCT ON.
         $positions = VehiclePosition::whereIn('vehicle_id', $vehicleIds)
-            ->select('vehicle_id', 'lat', 'lon', 'alt', 'speed', 'heading',
+            ->where('lat', '!=', 0)
+            ->select(\DB::raw('DISTINCT ON (vehicle_id) vehicle_id'),
+                     'lat', 'lon', 'alt', 'speed', 'heading',
                      'ignition_status', 'odometer', 'event_name', 'time', 'driver_id')
+            ->orderBy('vehicle_id')
             ->orderByDesc('time')
             ->get()
-            ->unique('vehicle_id') // keep only the latest per vehicle
             ->keyBy('vehicle_id');
 
         $vehicles = $request->user()->vehicleQuery()
@@ -95,24 +97,26 @@ class VehicleController extends Controller
     }
 
     /**
-     * GET /api/vehicles/{id}/positions?from=ISO&to=ISO&limit=500
-     * Position history for map playback / path drawing.
+     * GET /api/vehicles/{id}/positions?from=ISO&to=ISO&limit=1440
+     * Position history for path drawing — returned chronologically (ASC).
+     *
+     * Default window: last 24 h.
+     * Default limit : 1440 (one point every 2 min × 24 h, with headroom).
      */
     public function positions(Request $request, int $id): JsonResponse
     {
         $this->ensureAccess($request, $id);
 
-        $query = VehiclePosition::where('vehicle_id', $id)
-            ->orderByDesc('time');
+        $from = $request->from ?? now()->subDay()->toISOString();
+        $to   = $request->to   ?? now()->toISOString();
 
-        if ($request->from) {
-            $query->where('time', '>=', $request->from);
-        }
-        if ($request->to) {
-            $query->where('time', '<=', $request->to);
-        }
-
-        $positions = $query->limit($request->integer('limit', 500))->get();
+        $positions = VehiclePosition::where('vehicle_id', $id)
+            ->where('time', '>=', $from)
+            ->where('time', '<=', $to)
+            ->where('lat', '!=', 0)                           // Skip GPS-less records
+            ->orderBy('time')                                  // ASC — chronological for path
+            ->limit($request->integer('limit', 2000))
+            ->get(['time', 'lat', 'lon', 'speed', 'heading', 'ignition_status']);
 
         return response()->json($positions);
     }
