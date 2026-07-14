@@ -35,4 +35,23 @@ class AlertController extends Controller
 
         return response()->json($query->limit(200)->get());
     }
+
+    /**
+     * POST /api/alerts/{id}/resolve
+     * Mark an alert as resolved.
+     */
+    public function resolve(Request $request, int $id): JsonResponse
+    {
+        $vehicleIds = $request->user()->vehicleQuery()->pluck('id');
+
+        $alert = Alert::whereIn('vehicle_id', $vehicleIds)->findOrFail($id);
+
+        if ($alert->resolved_at) {
+            return response()->json(['message' => 'Already resolved', 'resolved_at' => $alert->resolved_at]);
+        }
+
+        $alert->update(['resolved_at' => now()]);
+
+        return response()->json(['message' => 'Resolved', 'resolved_at' => $alert->resolved_at]);
+    }
 }

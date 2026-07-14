@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Vehicle extends Model
 {
     protected $fillable = [
+        'provider',
         'dsco_vehicle_id',
         'dsco_uuid',
         'plate_no',

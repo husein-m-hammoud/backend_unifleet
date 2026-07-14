@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 class Category extends Model
 {
     protected $fillable = [
+        'provider',
         'dsco_category_id',
         'dsco_site_id',
         'dsco_parent_id',

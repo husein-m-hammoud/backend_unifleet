@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 class Geofence extends Model
 {
     protected $fillable = [
+        'provider',
         'dsco_geofence_id',
         'dsco_uuid',
         'name',

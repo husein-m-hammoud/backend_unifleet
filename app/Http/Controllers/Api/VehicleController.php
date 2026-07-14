@@ -44,17 +44,28 @@ class VehicleController extends Controller
             ->get()
             ->keyBy('vehicle_id');
 
+        // Map each vehicle to its site (keyed by provider + Safee site id) so the
+        // frontend can offer a Sites filter.
+        $providers = $request->user()->vehicleQuery()->distinct()->pluck('provider');
+        $siteMap   = \App\Models\Site::whereIn('provider', $providers)
+            ->get()
+            ->keyBy(fn ($s) => $s->provider . '|' . $s->dsco_site_id);
+
         $vehicles = $request->user()->vehicleQuery()
             ->with('currentDriver')
             ->get()
-            ->map(function ($vehicle) use ($positions) {
-                $pos = $positions->get($vehicle->id);
+            ->map(function ($vehicle) use ($positions, $siteMap) {
+                $pos  = $positions->get($vehicle->id);
+                $site = $siteMap->get($vehicle->provider . '|' . $vehicle->dsco_site_id);
                 return [
                     'id'             => $vehicle->id,
                     'dsco_id'        => $vehicle->dsco_vehicle_id,
                     'plate_no'       => $vehicle->plate_no,
                     'type'           => $vehicle->type,
                     'status'         => $vehicle->status,
+                    'site'           => $site
+                        ? ['id' => $site->id, 'name' => $site->name]
+                        : null,
                     'driver'         => $vehicle->currentDriver
                         ? ['id' => $vehicle->currentDriver->id, 'name' => $vehicle->currentDriver->name]
                         : null,
@@ -68,6 +79,54 @@ class VehicleController extends Controller
                         'odometer'        => $pos->odometer,
                         'event'           => $pos->event_name,
                         'recorded_at'     => $pos->time,
+                    ] : null,
+                ];
+            });
+
+        return response()->json($vehicles);
+    }
+
+    /**
+     * GET /api/vehicles/fuel
+     * Latest fuel snapshot per vehicle — fleet fuel overview.
+     */
+    public function fuelOverview(Request $request): JsonResponse
+    {
+        $vehicleIds = $request->user()->vehicleQuery()->pluck('id');
+
+        // Latest fuel log per vehicle (DISTINCT ON)
+        $fuelLogs = \App\Models\VehicleFuelLog::whereIn('vehicle_id', $vehicleIds)
+            ->select(\DB::raw('DISTINCT ON (vehicle_id) vehicle_id'),
+                     'time', 'fuel_liters', 'fuel_pct', 'total_fuel_used',
+                     'total_idle_fuel_used', 'fuel_consumption_per_100km',
+                     'range_km', 'fuel_low_indicator')
+            ->orderBy('vehicle_id')
+            ->orderByDesc('time')
+            ->get()
+            ->keyBy('vehicle_id');
+
+        $vehicles = $request->user()->vehicleQuery()
+            ->with('currentDriver')
+            ->get()
+            ->map(function ($vehicle) use ($fuelLogs) {
+                $fuel = $fuelLogs->get($vehicle->id);
+                return [
+                    'id'       => $vehicle->id,
+                    'plate_no' => $vehicle->plate_no,
+                    'type'     => $vehicle->type,
+                    'status'   => $vehicle->status,
+                    'driver'   => $vehicle->currentDriver
+                        ? ['id' => $vehicle->currentDriver->id, 'name' => $vehicle->currentDriver->name]
+                        : null,
+                    'fuel' => $fuel ? [
+                        'time'                       => $fuel->time,
+                        'fuel_liters'                => (float) $fuel->fuel_liters,
+                        'fuel_pct'                   => (float) $fuel->fuel_pct,
+                        'total_fuel_used'            => (float) $fuel->total_fuel_used,
+                        'total_idle_fuel_used'       => (float) $fuel->total_idle_fuel_used,
+                        'fuel_consumption_per_100km' => (float) $fuel->fuel_consumption_per_100km,
+                        'range_km'                   => (float) $fuel->range_km,
+                        'fuel_low_indicator'         => (bool) $fuel->fuel_low_indicator,
                     ] : null,
                 ];
             });
@@ -90,8 +149,15 @@ class VehicleController extends Controller
             ->orderByDesc('time')
             ->first();
 
+        $site = $vehicle->dsco_site_id
+            ? \App\Models\Site::where('provider', $vehicle->provider)
+                ->where('dsco_site_id', $vehicle->dsco_site_id)
+                ->first()
+            : null;
+
         return response()->json([
             ...$this->formatVehicle($vehicle),
+            'site'            => $site ? ['id' => $site->id, 'name' => $site->name] : null,
             'latest_position' => $latestPosition,
         ]);
     }
@@ -140,6 +206,41 @@ class VehicleController extends Controller
         }
 
         return response()->json($query->limit(200)->get());
+    }
+
+    /**
+     * GET /api/vehicles/{id}/trips/{tripId}/path
+     * Full GPS trace of a single trip, fetched live from Safee's vehicle/trip/path
+     * endpoint (higher resolution than our deduped live positions). Note: Safee
+     * only retains the path for recent trips — older trips may return few/no points.
+     */
+    public function tripPath(Request $request, int $id, int $tripId): JsonResponse
+    {
+        $this->ensureAccess($request, $id);
+
+        $trip = \App\Models\Trip::where('id', $tripId)
+            ->where('vehicle_id', $id)
+            ->firstOrFail();
+
+        $points = (new \App\Services\SafeeApiService($trip->provider))
+            ->getTripPath((int) $trip->dsco_trip_id);
+
+        $path = collect($points)
+            ->map(function ($p) {
+                $loc = $p['location'] ?? [];
+                return [
+                    'lat'   => isset($loc['lat']) ? (float) $loc['lat'] : null,
+                    'lon'   => isset($loc['lon']) ? (float) $loc['lon'] : null,
+                    'speed' => isset($p['speed']) ? (float) $p['speed'] : 0.0,
+                    'time'  => isset($p['time'])
+                        ? \Illuminate\Support\Carbon::createFromTimestamp((float) $p['time'])->toISOString()
+                        : null,
+                ];
+            })
+            ->filter(fn ($p) => $p['lat'] !== null && $p['lon'] !== null && ! ($p['lat'] == 0.0 && $p['lon'] == 0.0))
+            ->values();
+
+        return response()->json($path);
     }
 
     /**

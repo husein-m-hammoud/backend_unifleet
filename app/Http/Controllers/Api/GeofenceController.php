@@ -15,7 +15,13 @@ class GeofenceController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        // Only return zones for providers the user actually has vehicles in.
+        // Alrakeen currently has 0 geofences, so this returns []; retired DSCO
+        // zones are never shown.
+        $providers = $request->user()->vehicleQuery()->distinct()->pluck('provider');
+
         $geofences = Geofence::active()
+            ->whereIn('provider', $providers)
             ->get()
             ->map(fn ($g) => [
                 'id'          => $g->id,

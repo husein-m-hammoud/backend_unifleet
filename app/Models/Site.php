@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 class Site extends Model
 {
     protected $fillable = [
+        'provider',
         'dsco_site_id',
         'name',
         'status',

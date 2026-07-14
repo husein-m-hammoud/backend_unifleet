@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Trip extends Model
 {
     protected $fillable = [
+        'provider',
         'dsco_trip_id',
         'vehicle_id',
         'driver_id',

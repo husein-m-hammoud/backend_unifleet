@@ -20,6 +20,7 @@ class User extends Authenticatable
         'email',
         'password',
         'dsco_username',
+        'provider',
         'dsco_accessible_vehicle_ids',
     ];
 
@@ -49,9 +50,22 @@ class User extends Authenticatable
             ->whereIn('dsco_vehicle_id', $this->dsco_accessible_vehicle_ids ?? []);
     }
 
-    /** Returns a query builder scoped to the vehicles this user can see. */
+    /**
+     * Returns a query builder scoped to the vehicles this user can see.
+     *
+     * Scoped by BOTH provider and accessible vehicle IDs: a user logs in through
+     * one provider, and vehicle IDs are only unique within a provider — without
+     * the provider filter a saudiX user could match an Alrakeen vehicle of the
+     * same numeric id (and vice-versa).
+     */
     public function vehicleQuery()
     {
-        return Vehicle::whereIn('dsco_vehicle_id', $this->dsco_accessible_vehicle_ids ?? []);
+        $query = Vehicle::whereIn('dsco_vehicle_id', $this->dsco_accessible_vehicle_ids ?? []);
+
+        if ($this->provider) {
+            $query->where('provider', $this->provider);
+        }
+
+        return $query;
     }
 }
