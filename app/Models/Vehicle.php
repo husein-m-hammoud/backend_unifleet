@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Vehicle extends Model
@@ -47,6 +48,12 @@ class Vehicle extends Model
     public function currentDriver(): BelongsTo
     {
         return $this->belongsTo(Driver::class, 'current_driver_id');
+    }
+
+    /** Zones this vehicle is assigned to. Empty = unrestricted (all zones). */
+    public function zones(): BelongsToMany
+    {
+        return $this->belongsToMany(Zone::class, 'vehicle_zone');
     }
 
     public function driverAssignments(): HasMany

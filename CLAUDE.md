@@ -2,14 +2,45 @@
 ## Project Memory for Claude Code (VS Code)
 
 > Auto-loaded by Claude Code. Contains all project context, decisions, scope, and API reference.
-> Company: Cedars Technology | Client: UNIMAC | Last updated: July 2026 (session 7 — DSCO→Safee migration)
+> Company: Cedars Technology | Client: UNIMAC | Last updated: Sep 2026 (session 12 — real-ML anomaly detection via Rubix ML, poller connect-timeout fix + safee:health watchdog)
+
+> **⚠️ saudiX DECOMMISSIONED (2026-08-24):** saudiX is **no longer a partner** and was
+> **fully removed** — its `services.safee.providers.saudix` config + `SAFEE_SAUDIX_*` env,
+> and ALL its data (129 vehicles + cascaded positions/trips/telemetry, 865 alerts, 6
+> provider_sites, the `Cedars` login user). The poller no longer calls it (the 401 spam
+> stopped). **The only live provider now is Alrakeen.** The provider-agnostic layer is
+> intact, so a future partner is a config-only add (new `providers` key + `SAFEE_<NAME>_*`).
+> Historical "Done" entries below still mention saudiX as history — accurate for when written.
 
 > **⚠️ Provider migration (July 2026):** DSCO has been **retired**. The platform now
 > pulls from the **Safee Tracking REST Service** (the same platform DSCO ran on) via a
-> **provider-agnostic layer**. First provider is **Alrakeen** (`https://tk.alrakeen.sa`);
-> **saudiX** will be added later. Historical references to "DSCO" below describe the
-> original integration; the `dsco_*` DB column names are retained (not renamed) but now
-> hold Safee data. See §7, §9, §10 and the "Multi-provider" notes for current behavior.
+> **provider-agnostic layer**. The live provider is **Alrakeen** (`https://tk.alrakeen.sa`).
+> _(saudiX was also live July–Aug 2026 but was decommissioned 2026-08-24 — see banner above.)_
+> Historical references to "DSCO" below describe the original integration; the `dsco_*` DB
+> column names are retained (not renamed) but now hold Safee data. See §7, §9, §10.
+
+> **⚠️ Auth model (session 8, 2026-07-23):** login is now a **local account** (username/password
+> in the `users` table), NOT per-provider Safee login. The provider picker was removed. An admin
+> account (`is_admin`) sees **all providers merged**. Default admin: **`admin` / `admin`**. See §10.
+
+> **⚠️ User roles & permissions (session 10, 2026-08-07 — Phase 3 BUILT):** `users.role` = **owner** |
+> **admin** | **user** (source of truth; `is_admin` kept synced = owner|admin so existing manager gates
+> still work). **owner** = super-account (only owners manage owner/admin rows; last active owner protected;
+> the seeded `admin` account is now owner). **admin** = manages regular users, sees all vehicles, manages
+> zones/sites. **user** = scoped: sees only vehicles in granted zones — `vehicleQuery()` →
+> `whereHas('zones', in effectiveZoneIds())` where effective = direct `user_zone` grants ∪ all zones under
+> granted `user_site` (incl. future zones); **no grants ⇒ sees nothing**; unrestricted/no-zone vehicles stay
+> hidden. Legacy provider users (provider + `dsco_accessible_vehicle_ids`, no zone grants) fall back to old
+> provider scoping. Per-user: `allowed_pages` (jsonb; grantable = dashboard/map/vehicles/fuel/alerts/ai/reports),
+> `can_edit_vehicles` bool, `status` active|disabled (soft-delete; login rejects disabled → 403). `UserController`
+> CRUD at `/api/users` (manager-gated). Migrations `2026_08_07_000003/000004/000005`. **NB:** scoped users see 0
+> vehicles until `vehicle_zone` assignments exist (empty since the 2026-08-06 cleanup) — assign in the Zones UI.
+> **Password/email flows:** create with `send_email` (default true) generates a strong password (`Str::password(14)`)
+> + emails `AccountCredentials`, returning `generated_password` so the admin can relay it. `POST /api/users/{id}/password`
+> {mode: link|generate|manual}. Public `POST /api/auth/forgot-password` + `/reset-password` (Laravel password broker;
+> `User::sendPasswordResetNotification` overridden → `ResetPasswordLink` to `config('app.frontend_url')/reset-password`).
+> **`MAIL_MAILER=log`** for now (no SMTP) — emails go to `storage/logs/laravel.log`; sends are wrapped so they never
+> break the request. `config('app.frontend_url')` ← `FRONTEND_URL` (default http://localhost:8089).
 
 ---
 
@@ -17,7 +48,7 @@
 
 The **UNIFLEET** platform — an AI-powered fleet analytics system that:
 
-- Pulls real-time data from the **Safee Tracking API** (Alrakeen now, saudiX later; GPS, speed, fuel per vehicle)
+- Pulls real-time data from the **Safee Tracking API** (Alrakeen; provider-agnostic so more partners can be added; GPS, speed, fuel per vehicle)
 - Detects anomalies: geofence violations, excessive idling, unusual patterns
 - Sends **SMS + voice call alerts** via Twilio to drivers and managers
 - Generates **AI-powered reports** (daily, weekly, monthly) using Claude API
@@ -30,7 +61,7 @@ The **UNIFLEET** platform — an AI-powered fleet analytics system that:
 ## 2. Scope of Work (Contract Sections)
 
 ### 3.1 Data Integration
-- Integration with Safee Tracking APIs (multi-provider: Alrakeen, saudiX)
+- Integration with Safee Tracking APIs (multi-provider capable; currently Alrakeen — saudiX decommissioned 2026-08-24)
 - Extraction of fleet operational data and geofence information
 - Data normalization and processing for analytics
 
@@ -78,8 +109,8 @@ The **UNIFLEET** platform — an AI-powered fleet analytics system that:
 |---|---|---|
 | Backend | Laravel (PHP) | Team already uses it |
 | Frontend | Next.js / React | Existing demo project |
-| Database | PostgreSQL + TimescaleDB | Relational + time-series in one |
-| Cloud | Alibaba Cloud RDS | Being provisioned |
+| Database | PostgreSQL + TimescaleDB | Relational + time-series in one (⚠️ but RDS was requested PostGIS-only — see §13) |
+| Cloud | Alibaba Cloud ECS + RDS | Deployment target — not yet provisioned (see §13) |
 | AI Reports | Claude API (Anthropic) | `claude-sonnet-4-20250514` |
 | Alerts | Twilio | SMS + voice calls (confirmed) |
 | Background Jobs | Laravel Queues | Poll Safee API, process data |
@@ -154,9 +185,9 @@ All migrations: `database/migrations/2026_04_24_000001_*.php` through `*_000014_
 
 ### Reference Tables (upserted on every poll, soft-disabled when missing from API)
 ```sql
-sites           (id, provider, dsco_site_id, name, status[active|disabled], dsco_last_seen_at)          -- unique(provider, dsco_site_id)
+provider_sites  (id, site_id→sites, provider, dsco_site_id, name, status[active|disabled], dsco_last_seen_at)  -- unique(provider, dsco_site_id); raw per-provider mirror (was `sites`)
 categories      (id, provider, dsco_category_id, dsco_site_id, dsco_parent_id, name, status, dsco_last_seen_at)  -- unique(provider, dsco_category_id)
-geofences       (id, provider, dsco_geofence_id, dsco_uuid, name, code, dsco_company_id, description, points_json, status, dsco_last_seen_at)  -- unique(provider, dsco_geofence_id)
+geofences       (id, zone_id→zones, provider, dsco_geofence_id, dsco_uuid, name, code, dsco_company_id, description, points_json, status, dsco_last_seen_at)  -- unique(provider, dsco_geofence_id); raw per-provider mirror
 drivers         (id, provider, dsco_driver_id, dsco_uuid, name, mobile, gender, email, license_status, residency_status, access_key, badge_number_1, badge_number_2, status[active|disabled], dsco_last_seen_at, dsco_created_at, dsco_updated_at)  -- unique(provider, dsco_driver_id)
 vehicles        (id, provider, dsco_vehicle_id, dsco_uuid, plate_no, type, dsco_company_id, dsco_company_name, dsco_site_id, dsco_category_id, current_driver_id→drivers, vin, vehicle_model, vehicle_make, dsco_device_id, device_sim, device_imei, device_type, device_serial, device_installation_date, status[active|disabled], dsco_last_seen_at)  -- unique(provider, dsco_vehicle_id)
 ```
@@ -166,6 +197,28 @@ vehicles        (id, provider, dsco_vehicle_id, dsco_uuid, plate_no, type, dsco_
 vehicle_driver_assignments  (id, vehicle_id→vehicles, driver_id→drivers, started_at, ended_at[null=current])
 -- A new row is inserted every time the poller detects a driver change on a vehicle
 ```
+
+### Canonical Zone / Site layer (name-based, our-side)
+```sql
+sites   (id, name, slug UNIQUE, status)                       -- one row per distinct site NAME
+zones   (id, name, slug UNIQUE, site_id→sites[null], status)  -- one row per distinct geofence NAME; grouped under a site
+vehicle_zone (id, vehicle_id→vehicles, zone_id→zones)         -- assignment ("can enter"); NO rows = unrestricted (all zones)
+```
+The raw `provider_sites` / `geofences` are per-provider mirrors (same physical place appears in BOTH providers with different ids but the same name). `ZoneSiteSyncService` (run via `zones:sync` **and** inside the full poll) merges them into canonical `sites`/`zones` **by slug(name)** and back-links `provider_sites.site_id` / `geofences.zone_id`. Key on **name/slug, never provider id**. `zones.site_id` is set later (admin UI / import). Vehicle→zone assignment is authoritative; fall back to the provider's `dsco_site_id → provider_sites.name` where a vehicle has none.
+**API (`ZoneController`)** — reads open to any authenticated user, **writes admin-only** (403 otherwise):
+`GET /api/zones` (zones + site + geofence/vehicle counts) · `PUT /api/zones/{id}` (set `site_id`/`status`) · `GET /api/zones/sites` (canonical sites + zone counts) · `POST /api/zones/sites` (create, merges on slug) · `PUT /api/zones/sites/{siteId}` (rename/status) · `GET /api/vehicles/{id}/zones` (`{unrestricted, zones}`) · `PUT /api/vehicles/{id}/zones` (`{zone_ids:[]}` sync; empty = unrestricted) · `POST /api/zones/import` (bulk assign). Routes register `zones/sites`/`zones/import` before `zones/{id}` (whereNumber) to avoid collision.
+
+**Provenance** (`zones` & `sites` both carry `source` = `provider`|`manual` + `created_by` FK→users, added 2026-08-03): `ZoneSiteSyncService` sets `source='provider'` on `firstOrCreate`; `storeZone`/`storeSite` set `source='manual'` + `created_by` = current user. Existing rows defaulted to `provider`. `formatZone`/`sites()` expose `source`, `created_at`, `created_by` (creator name). **NB (2026-08-06):** `source` alone was unreliable — the migration defaulted *all* rows to `provider`, but only zones with a backing geofence (`geofences_count ≥ 1`) truly come from a provider. A one-off cleanup **deleted the 35 non-provider zones** (leftovers from the old import-creates-zones behaviour), leaving the 10 real provider zones; the detached vehicle assignments were logged to `vehicle_zone_changelogs` (`source='system'`). The UI shows only a **manual** badge (no "provider" string/logo — a zone's name can merge geofences from *both* providers, so a single provider logo would mislead).
+
+**Contacts / zone responsibles** (`contacts` + `contact_zone`, added 2026-08-06; admin-only). People to notify about an issue in a zone. `contacts`: `name`, `phone` (**both required**), `email`, `description`, `note` (optional), `all_zones` bool, `created_by`. `all_zones=true` ⇒ responsible for **every** zone incl. ones added later — resolved at query time by **`Zone::responsibleContacts()`** (`where all_zones OR whereHas zones`), so **no pivot rows are written** for all-zones contacts and future zones are auto-covered. `ContactController` CRUD: `GET/POST /api/contacts`, `PUT/DELETE /api/contacts/{id}`, plus **`GET /api/zones/{id}/contacts`** (who to notify for a zone). **Pending:** wiring `responsibleContacts()` into the alert/notification flow (surface the responsible person when a zone alert fires) is future work.
+
+**Vehicle zone assignment audit** — `vehicle_zone_changelogs` (vehicle_id, plate_no, old_zones/new_zones JSON, `source` = `manual`|`import`, user_id, ip_address, changed_at). Written by `logZoneChange()` (skips no-ops) from `setVehicleZones` (`manual`) and the `import` apply loop (`import`). Read via **`GET /api/vehicles/{id}/zone-log`** (last 50, with changer name).
+
+**`POST /api/zones`** (admin, `storeZone`) — create a canonical zone by name (optional `site_id`); merges on slug (`firstOrCreate`). Zones otherwise arrive from the providers (geofence canonicalization).
+
+**`POST /api/zones/import`** (admin) — bulk vehicle→zone assignment from a spreadsheet the client parses (SheetJS). Body: `{rows:[{plate,zone,site?}], apply:bool}`. Matches vehicles by `normalizePlate()` (uppercase, strip non-alphanumerics — so "3281 SXA" == " 3281sxa ") and zones by slug against **existing** zones only — **never creates zones**. A zone name with no match is reported under `unmatched_zones` (add the zone first, then re-import). `apply=false` = dry-run. `apply=true` **replaces** each matched vehicle's zone set via `sync()` (only vehicles that matched ≥1 existing zone). Returns `matched_count`, `unmatched_plates`, `unmatched_zones`, `zones_matched`, `assigned_vehicles`, `matched[]`.
+
+_Phase 2 complete: `zone_unauthorized` alert rule + admin UI + Excel import all shipped. Phase 3 (todo): `user_site`/`user_zone` permissions → visibility scoping._
 
 ### Time-Series Tables (append-only, hypertables on production TimescaleDB)
 ```sql
@@ -180,7 +233,8 @@ vehicle_weight_logs(time, vehicle_id, weight, raw jsonb)
 ```sql
 trips    (id, provider, dsco_trip_id, vehicle_id, driver_id, start_time, end_time, distance, avg_speed, max_speed, idle_time, driving_time, completed, start_lat/lon/alt, end_lat/lon/alt)  -- unique(provider, dsco_trip_id)
 alerts   (id, vehicle_id, driver_id, type, triggered_at, resolved_at, twilio_status, meta jsonb)
-reports  (id, type[daily|weekly|monthly], generated_at, content, vehicle_id, driver_id)
+reports  (id, created_by→users, type[daily|weekly|monthly|driver_safety], title, generated_at, period_from, period_to, content jsonb-snapshot, vehicle_id, driver_id)  -- created_by/title/period_* added 2026-08-23; content holds the full AnalyticsInsights JSON
+vehicle_blocklist (id, provider, dsco_vehicle_id, plate_no, blocked_by→users)  -- unique(provider, dsco_vehicle_id); vehicles a manager DELETEd — the poller skips these so they're never re-imported (2026-08-24)
 ```
 
 ### Soft-disable logic (scoped per provider)
@@ -436,7 +490,7 @@ php artisan safee:poll --backfill      # also pull GPS history
    `config('services.safee.providers')`. Each provider gets its own `SafeeApiService`,
    cache namespace (`safee_{provider}_*`), and provider-scoped queries.
 1. **Interval guard** — checks `SAFEE_POLL_INTERVAL_MINUTES` (.env, default 2) via cache key `safee_{provider}_last_poll_ran_at`. `--force` bypasses. **`--live-only` skips the guard AND steps 2/3/5/6/7** — it runs only step 4 (live state) + the alert engine, then returns.
-2. **Sync reference data** — sites → categories → geofences → drivers → vehicles (upsert keyed by `(provider, dsco_*_id)` + provider-scoped soft-disable). Alrakeen returns 0 categories/geofences/drivers.
+2. **Sync reference data** — sites → categories → geofences → drivers → vehicles (upsert keyed by `(provider, dsco_*_id)` + provider-scoped soft-disable). Alrakeen returns 0 categories/geofences/drivers. **`syncVehicles` skips any `(provider, dsco_vehicle_id)` in `vehicle_blocklist`** (manager-deleted vehicles) so they're never re-imported.
 3. **Track driver changes** — if a vehicle's driver changed, closes the old `vehicle_driver_assignments` row and opens a new one.
 4. **Live state** — `vehicle/last-state` in chunks of 50 → one `vehicle_positions` row per vehicle **only when the Safee `date` is newer than last stored** (dedup via `last_pos_ts_{vehicle_id}` cache, 1h TTL). **Skips `lat=0, lon=0`** (offline/no-GPS). Accumulates new-position vehicle IDs across **all** chunks for the alert engine (a prior bug only passed the last chunk). Log: `stored: X, skipped (no new fix): Y`.
 5. **Per-vehicle telemetry** — for each active vehicle: trips (since `safee_{provider}_last_sync_timestamp`, fallback `SAFEE_LOOKBACK_HOURS`), then fuel/speed/weight (last snapshot, `{id}` shape — no date range).
@@ -497,7 +551,8 @@ SAFEE_ALRAKEEN_CLIENT_ID=api
 SAFEE_ALRAKEEN_CLIENT_SECRET=…
 SAFEE_ALRAKEEN_USERNAME=C.Tech
 SAFEE_ALRAKEEN_PASSWORD=…
-# SAFEE_SAUDIX_* … (add when saudiX onboards; also uncomment the stub in config/services.php)
+# To onboard another partner: add SAFEE_<NAME>_* vars here + a new key under
+# config/services.safee.providers. (saudiX was removed 2026-08-24.)
 ```
 (Old `SAFEE_*` fall back to the retired `DSCO_POLL_INTERVAL_MINUTES` / `DSCO_LOOKBACK_HOURS` / `DSCO_BACKFILL_DAYS` if still present.)
 
@@ -515,15 +570,17 @@ SAFEE_ALRAKEEN_PASSWORD=…
 
 ## 10. Frontend API Layer
 
-### Auth Flow
-1. Frontend POSTs `{ username, password }` to `POST /api/auth/login`
-2. Backend (`SafeeUserAuthService`) calls the **Safee** Keycloak token endpoint of the default provider (`SAFEE_DEFAULT_PROVIDER`, currently Alrakeen) with those credentials
-3. On success: creates/finds `User` by `dsco_username`, stores encrypted Safee tokens in `dsco_user_tokens`, fetches accessible vehicle IDs and stores in `dsco_accessible_vehicle_ids`, issues a Sanctum token
-4. Returns `{ token, user }` — frontend stores the Sanctum token and sends it as `Authorization: Bearer <token>` on all subsequent requests
-5. Safee token refresh is transparent — `RefreshSafeeToken` middleware runs before every protected request and silently refreshes if expiring within 60s
+### Auth Flow (LOCAL accounts — session 8, 2026-07-23)
+1. Frontend POSTs `{ username, password }` to `POST /api/auth/login` (no provider — the login screen's provider picker was removed)
+2. `AuthController::login` looks up a **local** `User` by `dsco_username` and verifies the password with `Hash::check` (bcrypt). No Safee call at login.
+3. On success: issues a Sanctum token; returns `{ token, user }` where `user` includes `is_admin` and a live `vehicles_count` (from `vehicleQuery()->count()`).
+4. Frontend stores the Sanctum token and sends it as `Authorization: Bearer <token>` on all subsequent requests.
+5. `RefreshSafeeToken` middleware still runs but is a **no-op for local/admin users** (no `dscoToken`). The background poller — not per-user login — is what pulls provider data.
 
-> **saudiX follow-up:** login is hardcoded to the default provider and `User` has no provider
-> column yet. Storage columns keep the `dsco_*` names (reused, not renamed).
+> **Accounts are provisioned by us.** Default admin: **`admin` / `admin`** (seeded in `DatabaseSeeder`
+> via `updateOrCreate` on `dsco_username='admin'`, `provider=null`, `is_admin=true`). A proper
+> user-management UI is deferred. The old per-provider Safee login (`SafeeUserAuthService`) is no
+> longer wired to the UI but the class remains. Removed route: `GET /api/auth/providers`.
 
 ### API Endpoints
 | Method | URL | Description |
@@ -549,11 +606,18 @@ SAFEE_ALRAKEEN_PASSWORD=…
 | PUT | `/api/settings/{key}` | Update a setting + write changelog entry |
 | GET | `/api/settings/changelog` | All setting change history |
 | GET | `/api/settings/{key}/changelog` | Change history for one setting |
+| GET | `/api/analytics/insights` | AI Insights payload — health score, KPIs, findings, sections (query: `from`, `to`, `zone`, `type`) |
+| GET | `/api/reports` | Caller's saved reports (scoped by `created_by`) |
+| POST | `/api/reports` | Generate + persist a report snapshot, returns full JSON (body: `type`, `from?`, `to?`, `title?`) |
+| GET | `/api/reports/{id}` | Fetch a saved report snapshot (owner only) |
+| GET | `/api/vehicles/device-conflicts` | Vehicles sharing a tracker IMEI (data-integrity flag), grouped by IMEI |
+| DELETE | `/api/vehicles/{id}` | **Delete a vehicle + related data** (manager-only, no-data-only; block-lists it — see §12 session 11) |
 
-### Per-User Vehicle Filtering
-- At login, backend calls `vehicle/list-info` with the user's Safee token and stores the returned vehicle IDs in `users.dsco_accessible_vehicle_ids`
-- All vehicle/driver/alert queries are scoped via `$user->vehicleQuery()` → `Vehicle::whereIn('dsco_vehicle_id', [...])`
-- ⚠️ **saudiX caveat:** `vehicleQuery()` filters on `dsco_vehicle_id` only (not `provider`). Fine while one provider handles login; must add provider scoping before saudiX users exist (IDs could collide).
+### Vehicle Scoping — `User::vehicleQuery()`
+Every vehicle/driver/site/alert/dashboard query funnels through `$user->vehicleQuery()`, so scoping is defined in one place:
+- **Admin (`is_admin = true`):** returns `Vehicle::query()` — **ALL vehicles across every provider, merged** into one fleet (dashboard, alerts, sites, live map all merge automatically). `provider = null`.
+- **Provider user (legacy):** `Vehicle::whereIn('dsco_vehicle_id', dsco_accessible_vehicle_ids)->where('provider', $user->provider)` — scoped by BOTH provider and accessible IDs (vehicle IDs are only unique *within* a provider, so the provider filter prevents cross-provider ID collisions).
+- Vehicle payloads (`formatVehicle` + `live`) now include `provider` so the frontend can badge each vehicle with its source (Alrakeen / saudiX).
 
 ### Key Files
 - `app/Services/SafeeAuthService.php` — per-provider service-account auth + cached token
@@ -581,11 +645,16 @@ SAFEE_ALRAKEEN_PASSWORD=…
 | Cloud | Alibaba Cloud | Being provisioned |
 | Geofence format | Polygon (array of lat/lon points) | Per Safee API structure |
 | Driver profiles | Per-driver baseline, not global threshold | Core differentiator |
-| Tracking source | Safee Tracking (multi-provider) | DSCO retired; Alrakeen live, saudiX later; provider-agnostic layer |
+| Tracking source | Safee Tracking (multi-provider capable) | DSCO retired; **Alrakeen** live; saudiX decommissioned 2026-08-24; provider-agnostic layer |
 
 ---
 
 ## 12. Pending / Open Items
+
+### Done (session 12 — 2026-09-24, real-ML anomaly detection + poller resiliency)
+- [x] **Real machine learning in AI Insights** (`FleetAnomalyService`) — genuine on-server ML via **Rubix ML** (`composer require rubix/ml`, pure PHP, $0, PDPL-safe). **Isolation Forest** scores each vehicle's unusualness vs. the fleet + **K-Means** clusters behaviour profiles; robust median/MAD z-score names the deviating feature. Features (idle_pct, distance_km, trips, engine_min, max_speed, over_speed) come from `FleetMetricsService::perVehicle` — the ML never touches raw GPS, so numbers stay exact. Returns DATA ONLY; `AnalyticsService::anomalyInsights()`/`anomalyLine()` templates turn findings into the existing `insights[]` shape, prepended ahead of the rule-based narrative, and added to `sections.anomalies`. Fails closed (`available:false`) on too-few vehicles/any error → deterministic narrative still renders. Admin-tunable settings (code defaults): `anomaly_min_vehicles`(8), `anomaly_contamination`(0.1), `anomaly_trees`(120), `anomaly_max_findings`(4). **Why ML not LLM:** client wanted real AI at no recurring cost — Rubix runs locally (no API/GPU bill) and matches contract §3.2. LLM (Claude API / local Ollama) deliberately deferred as optional prose polish. **NB:** needs `composer install` on deploy (new dep). Frontend renders via the existing insights panel (icon `ai`→Sparkles); a dedicated "AI Anomalies" UI section is still TODO.
+- [x] **Fixed the Sep 2026 silent-outage class of bug.** Root cause: Alrakeen went unreachable 2026-09-10; the auth-token fetch (`SafeeAuthService::fetchToken`) had **no timeout** and `SafeeApiService::dispatch` no *connect* timeout, so requests hung on cURL's ~300s default and wedged the every-30s live poll; the scheduler then died and nothing polled for 14 days with **no alert**. Fixes: `connectTimeout(10)`+`timeout(20)` on the token fetch, `connectTimeout(10)` on dispatch (fail fast in ~10s). Backfilled the gap (`SAFEE_LOOKBACK_HOURS=360 php -d memory_limit=512M artisan safee:poll --force alrakeen` after `cache:forget safee_alrakeen_last_sync_timestamp`); trips 3,155→4,150, continuous again.
+- [x] **Poller freshness watchdog** — `safee:health` (`PollHealthCommand`) raises a **self-resolving `poll_stale` Alert** (vehicle_id null) when the freshest active-vehicle position is older than `poll_stale_threshold_hours` (default 6); resolves + stamps `back_online` when data returns. Scheduled **hourly** in `routes/console.php`. Exit 1 when stale (usable from cron/CI). **Reminder:** the pipeline is only alive while `schedule:work` runs — keep it under a process manager (dev) or the `* * * * * schedule:run` crontab (prod).
 
 ### Done (July 2026 — DSCO → Safee/Alrakeen migration)
 - [x] **Provider-agnostic layer** — `SafeeAuthService`, `SafeeApiService`, `SafeeUserAuthService`, `RefreshSafeeToken`, `SafeePollCommand`; `config/services.safee.providers.*` (saudiX stub commented)
@@ -594,8 +663,16 @@ SAFEE_ALRAKEEN_PASSWORD=…
 - [x] **Data-quirk handling** (`tsToCarbon`) — ms-vs-s timestamps, scientific-notation date strings, string odometer
 - [x] **Retired DSCO** — deleted DscoApiService/DscoAuthService/DscoUserAuthService/RefreshDscoToken/DscoPollCommand + `services.dsco` block. Kept `DscoUserToken` + `dsco_*` columns (reused)
 - [x] **Verified live** — Alrakeen: 2 sites, 79 vehicles, 0 drivers/categories/geofences, 373 trips; login issues Sanctum token + 79 accessible vehicles (company UNIMAC)
-- [ ] **saudiX follow-ups:** per-user provider (User has no provider col); provider-scope `User::vehicleQuery()`; add `SAFEE_SAUDIX_*` + uncomment config stub
+- [x] **saudiX live (2026-07-21)** — `SAFEE_SAUDIX_*` in `.env`, config stub uncommented; `provider` col on users; `vehicleQuery()` provider-scoped. saudiX: 2 sites (Qiddiya, "Tracking + Weight Sensor"), 76 vehicles, 244 trips. IDs are huge (e.g. 132849103110) — no collision with Alrakeen's small IDs.
 - [ ] **Note:** Alrakeen returns 0 geofences → AlertEngine `geofence_exit` + heatmap are no-ops there; raise with client
+
+### Done (session 8 — 2026-07-23, local admin auth + merged fleet)
+- [x] **Local auth** — `AuthController::login` now checks `users` table with `Hash::check` (no Safee call). Removed provider from the login request + the `GET /api/auth/providers` route/method. `userPayload` returns `is_admin` + live `vehicles_count`.
+- [x] **`is_admin` column** (migration `2026_07_23_000001_add_is_admin_to_users`) — `User::vehicleQuery()` returns ALL vehicles (all providers merged) for admins; otherwise provider+id scoped.
+- [x] **Default admin `admin`/`admin`** seeded idempotently in `DatabaseSeeder` (`updateOrCreate`, `provider=null`, `is_admin=true`). Sees all 155 vehicles (79 alrakeen + 76 saudix).
+- [x] **`provider` in vehicle payloads** (`formatVehicle` + `live`) → frontend provider badges.
+- [x] **Both providers polled** — no-arg `safee:poll` (and scheduler) loops all providers; verified alrakeen+5/saudix+7 in one live run.
+- [ ] **Follow-up:** replace `admin`/`admin` with a strong password + real user-management screen before any non-local deploy.
 
 ### Done (April 2026)
 - [x] Scaffold Laravel project + DscoApiService + DscoAuthService
@@ -617,13 +694,38 @@ SAFEE_ALRAKEEN_PASSWORD=…
 - [x] **Position history dedup in live poll** — `syncLiveState()` now deduplicates by DSCO `date` timestamp using per-vehicle cache key (`last_pos_ts_{id}`, 1h TTL). Parked/unchanged vehicles are skipped instead of inserting duplicate rows. Each stored row has `speed` for future speed-at-location analysis (e.g. Phase 2 over-speed detection).
 - [x] **SettingController** — `GET /api/settings` (grouped), `PUT /api/settings/{key}` (typed update + changelog), `GET /api/settings/changelog`
 - [x] **Setting + SettingChangelog models** — `Setting::get(key, default)` helper; changelog stores old/new value, user, IP
-- [x] **Migrations + seeder** — `settings` and `setting_changelogs` tables; 8 default settings seeded
-- [x] **AlertEngineService** — `over_speed`, `geofence_exit`, `low_fuel` detection; cooldown per vehicle+type; geofence ray-casting PIP; runs after every `dsco:poll` cycle
+- [x] **Migrations + seeder** — `settings` and `setting_changelogs` tables; default settings seeded (incl. `unauthorized_zone_threshold`, `no_signal_threshold_hours`)
+- [x] **AlertEngineService** — `over_speed`, `geofence_exit`, `low_fuel`, `idle`, `no_signal`, `zone_unauthorized` detection; cooldown per vehicle+type; geofence ray-casting PIP; runs after every `dsco:poll` cycle
+  - **`idle`**: per-vehicle-type threshold — `idleThresholdFor(vehicle)` = `vehicle_type_idle_thresholds[type]` (minutes) ?? global `idle_threshold`. Managed via `GET/PUT /api/settings/idle-thresholds` (`SettingController`; routes registered before `settings/{key}`).
+  - **`over_speed`** (site- & type-aware, 2026-08-07): `resolveSpeedLimit(vehicle,lat,lon)` picks the effective km/h limit by priority **site > type > default**. *Site*: if the vehicle is physically inside a geofence whose canonical `zone.site_id` points to a `sites` row with a non-null `speed_limit`, that limit applies to EVERY vehicle inside regardless of type (most restrictive site wins on overlap) — e.g. Qiddiya=50 flags a truck whose type limit is 120. *Type*: else `vehicle_type_speed_limits[type]` (km/h) if set. *Default*: else the global `speed_limit` setting. Meta adds `limit_source` (site|type|default) + `site_name` (site only). Managed via `GET/PUT /api/settings/speed-limits` (`SettingController`, returns `{default, types[], sites[]}`; PUT body `{types?:{TYPE:kmh|null}, sites?:{SITE_ID:kmh|null}}`; routes before `settings/{key}`). New models: `VehicleTypeSpeedLimit`; `sites.speed_limit` column. **Gotcha:** the site limit only fires once a zone is linked to the site via `zones.site_id` (set in the Zones admin UI) — most zones are currently unlinked, so assign Qiddiya's zones to the Qiddiya site before its 50 km/h limit takes effect.
+  - **`zone_unauthorized`** (dwell-based, reworked 2026-08-03): a vehicle inside a geofence whose canonical `zone_id` is NOT in its assignment is tracked via a provisional `zone_presences` row (`entered_at`/`last_seen_at`) — **not** alerted immediately (passing through is fine). Promoted to a real alert only once dwell ≥ `unauthorized_zone_threshold` setting (default 15 min) OR the vehicle goes offline inside the zone. Meta: `zone_id`, `zone_name`, `entered_at`, `dwell_minutes`, `threshold`, `idle`, `offline`, `lat`, `lon`; the alert's dwell meta keeps refreshing while it stays. Skipped when: no assignment (unrestricted), or the zone is flagged `is_open` (open to all). Presence is deleted on leaving; the raised alert persists. `reconcileZonePresence()` runs per-fix in the poll; `sweepZonePresences()` runs on the full poll (via `runZonePresenceSweep`) to catch vehicles that went dark inside a zone and dropped out of the incremental poll.
+  - **`no_signal`** (signal lost / restored): a `checkSignalState()` **sweep over ALL active vehicles** (not just ones that reported) runs on the **full poll (every 5 min)** — a dead tracker has no new fix so the per-fix rules never see it. State transition tracked via `Cache` key `signal_state_{id}`: `live → no_signal` opens a `no_signal` alert (`meta.last_seen` = last fix ISO, `meta.threshold_hours`); `no_signal → live` resolves the open alert (sets `resolved_at`) **and** stamps `meta.back_online=true` + `meta.restored_at` so the UI shows "back online". First observation seeds state silently (no alert burst for already-dark vehicles). **Threshold is admin-configurable in hours** via the `no_signal_threshold_hours` setting (default **24h**, group `alerts`; loaded in the constructor as `$noSignalThresholdMin`, floored at 5 min). Below it a vehicle is just "offline"; above it → "No signal" (with last-seen). Keep in sync with frontend `NO_SIGNAL_DEFAULT_HOURS` / runtime `setNoSignalThresholdHours()` + the `DashboardController` summary count (also reads the setting). **NB:** the old fixed `NO_SIGNAL_AFTER_MIN=30` const was renamed `ZONE_OFFLINE_AFTER_MIN` and now only powers the short "went quiet inside a zone" detector in `zone_unauthorized` — unrelated to the no-signal threshold.
+- [x] **ContactController** (admin-only, 2026-08-06) — zone responsibles CRUD (`/api/contacts`, `/api/zones/{id}/contacts`); `all_zones` flag auto-covers future zones via `Zone::responsibleContacts()`. Notify-on-zone-issue wiring is pending.
 - [x] **AlertController::resolve()** — `POST /api/alerts/{id}/resolve` persists `resolved_at` to DB
 - [x] **`VehicleController::fuelOverview()`** — `GET /api/vehicles/fuel` returns latest fuel snapshot per vehicle via `DISTINCT ON (vehicle_id)` query
 - [x] **`DscoUserAuthService::fetchAccessibleVehicleIds()` fallback** — if DSCO `vehicle/list-info` returns empty (API outage or permission issue), falls back to all `dsco_vehicle_id` values in the local `vehicles` table. Prevents the dashboard showing zero vehicles when DSCO is unreachable.
 
+### Done (session 11 — 2026-08-24, saudiX decommissioned)
+- [x] **Removed saudiX entirely** (client dropped the partner). Deleted `services.safee.providers.saudix` + `SAFEE_SAUDIX_*` env; `config:clear`+`cache:clear` → poller only loops `alrakeen` (401 spam stopped). Deleted all data in one transaction: 129 vehicles (CASCADE → 51,767 positions, 9,458 speed logs, 1,537 weight logs, 2,240 trips, 22 zone-changelogs), 865 alerts (FK was SET NULL), 6 provider_sites, the `Cedars` login user (id 3) + token. 0 orphans; **80 alrakeen vehicles remain**. Frontend: removed `saudiex-logo.png`, `ProviderBadge` saudix entry, narrowed `Provider` type to `'alrakeen'`. Provider-agnostic layer untouched — a new partner is a config-only add. Historical migration files still reference saudix (correct as history; not edited).
+
+### Done (session 11 — 2026-08-24, Vehicle delete + data-integrity)
+- [x] **Duplicate-tracker detection** — `GET /api/vehicles/device-conflicts` (`VehicleController@deviceConflicts`): groups the caller's vehicles by `device_imei` (the globally-unique hardware id) and returns any IMEI shared by 2+ vehicles. Scoped via `vehicleQuery()`. No DB constraint is added (a device swap creates a brief legitimate overlap — a hard UNIQUE would crash the poller); this is a display-only flag. Surfaced on the Vehicles page (banner + red "Duplicate device" badge).
+- [x] **Delete a vehicle** — `DELETE /api/vehicles/{id}` (`VehicleController@destroy`). Guards: **manager-only** (403 otherwise); **no-data-only** — rejects with 422 unless the vehicle has NO valid position rows (`vehicle_positions` where `lat != 0`), mirroring the frontend `!vehicle.position` rule (a live/stale "No signal" vehicle still has old data → NOT deletable); scoped via `vehicleQuery()` (404 if not visible). In a transaction it: deletes the vehicle (CASCADE wipes positions/trips/speed-weight-fuel logs/driver-assignments/zone links/presence), **deletes its alerts** (their FK is SET NULL by default; removed for a clean delete), and **keeps saved reports** as historical snapshots (their `vehicle_id` FK is SET NULL). Not reversible.
+- [x] **Block-list so the poller can't re-create it** — migration `2026_08_24_000001_create_vehicle_blocklist_table` (`vehicle_blocklist`: id, provider, dsco_vehicle_id, plate_no, blocked_by→users, unique(provider,dsco_vehicle_id)). `destroy` inserts the deleted `(provider, dsco_vehicle_id)`; `SafeePollCommand::syncVehicles` loads the provider's block-list up front and `continue`s past any row whose `id` is block-listed, so a deleted vehicle is never re-imported from the provider API. (Without this, the next successful poll would re-insert it as a fresh empty record.)
+- **FK on-delete map (for reference):** CASCADE — vehicle_positions, vehicle_events, vehicle_fuel_logs, vehicle_speed_logs, vehicle_weight_logs, trips, vehicle_driver_assignments, vehicle_zone, zone_presences, vehicle_zone_changelogs; SET NULL — alerts, reports.
+
+### Done (session 11 — 2026-08-23, AI Insights + Reports BUILT — Phase 3, no LLM)
+- [x] **Deterministic "AI Insights" engine (no Claude API, $0 recurring).** The customer sees "AI" but nothing is sent off-server — the `claude` config stays **unused**. Client requirement: show AI, no recurring third-party cost. Fuel deliberately excluded this version.
+- [x] **`FleetMetricsService`** (`app/Services/`) — shared aggregation from an already-scoped vehicle-id set + date range. `summary` / `perVehicle` (incl. `used` flag) / `zoneActivity` (via `vehicle_zone` pivot) / `idleRanking` / `unusedVehicles`. Reads `trips` (distance metres→km, idle/driving seconds→min, avg/max_speed km/h) + `alerts`. `SAFETY_ALERT_TYPES = over_speed/idle/zone_unauthorized/geofence_exit`. **This is the same trips-summing logic the dashboard uses — the report never calls the Safee API, it reads the local `trips` table.**
+- [x] **`AnalyticsService`** — `healthScore` (0–100 = weighted safety 0.4 + utilization 0.3 + movement 0.3; weights from `settings` `health_weight_*`), `rankByRisk` (**per-VEHICLE** risk 0–100, Low≥80/Med60-79/High<60; `risk_weight_overspeed`/`risk_weight_idle` settings), `insights()` returns `{health, summary_line, kpis (vs previous equal window), insights[] narrative, sections{safety,utilization,zones,idle_ranking}, totals}`. **Graceful trend degradation:** if the previous window has 0 trips, `trend=null` + "first tracked period" (trip data has gaps, so this fires often).
+- [x] **`AnalyticsController@insights`** `GET /api/analytics/insights?from&to&zone&type` — scoped via `vehicleQuery()`, applies zone (`whereHas zones`) + vehicle-type filters.
+- [x] **`ReportController`** `GET/POST /api/reports`, `GET /api/reports/{id}` — reuse `Report` model; snapshot stored in `reports.content` (JSON, cast `array`). Migration `2026_08_23_000001_add_owner_to_reports` (created_by/title/period_from/period_to); list/show scoped by `created_by` (owner-only).
+- [x] **Verified** — php -l all files, HTTP smoke of insights + reports store/list/show as a manager, zone/type filters. See frontend CLAUDE.md for the UI (AIReportsPage/ReportsPage un-blurred, shared `InsightsReport` component, PDF/Excel export). Plan: `docs/ai-reports-plan.md` (v2).
+- **IMPORTANT data reality:** 0 Driver rows / 0 trips with `driver_id` → safety is **per-vehicle not per-driver** (auto-upgrades when driver data lands). `vehicle_zone` only ~5 rows → zone activity is sparse.
+- **Deferred:** harsh-braking (no source column → safety = over_speed + idle only); admin UI for the health/risk weight settings; driver-level reporting; fuel pillar.
+
 ### Critical DB notes
+- **DB timezone (`timestamptz`):** the pgsql connection forces `timezone => UTC` (`config/database.php`, override `DB_TIMEZONE`). Required so the time-series `time` column (`timestamptz`) stores true UTC instants. Without it the session inherits the server tz (dev machine = `Asia/Beirut`) and Laravel's naive datetime strings get reinterpreted, storing `time` −3h off. Only the 5 `time` columns are `timestamptz`; every other column is `timestamp` (without tz) and is unaffected. A one-time correction already fixed existing dev rows (`UPDATE … SET time = (time AT TIME ZONE 'Asia/Beirut') AT TIME ZONE 'UTC'`). **Production (fresh RDS) needs only the config — do NOT run that correction there** (data is written correct from the start, so it would double-shift).
 - Local DB holds both retired `provider='dsco'` rows (old test data — left untouched by Alrakeen polls) and live `provider='alrakeen'` rows. All entity queries/upserts are provider-scoped.
 - `vehicle_positions` has legacy `lat=0` rows from before the fix. All queries filter `where lat != 0` — harmless but waste space. Clean with `DELETE FROM vehicle_positions WHERE lat = 0` on production.
 - Safee `vehicle/last-state` returns `lat=0, lon=0` for offline/parked vehicles. Do NOT store these.
@@ -639,7 +741,40 @@ SAFEE_ALRAKEEN_PASSWORD=…
 - [ ] Define geofence alert rules (which zones are "authorized") → Phase 2
 - [ ] Add production frontend URL to `config/cors.php` allowed_origins when deploying
 - [ ] Plan mobile app tech (React Native? Flutter?) → Phase 5
-- [ ] Set up Claude API key in Laravel `.env` → Phase 3 reports
+- [ ] ~~Set up Claude API key in Laravel `.env` → Phase 3 reports~~ — **not needed**: AI Insights are computed on-server (deterministic, no LLM, no recurring cost). Only wire the `claude` config later if the client explicitly wants generative text (pay-per-use).
+
+---
+
+## 13. Deployment Target (Alibaba Cloud — requested from IT client)
+
+Deployment infra was requested from the UNIMAC IT client (original email ~May 2026; deploy stage confirmed **2026-08-28**). **Nothing is provisioned yet** — these are the specs we asked IT to set up:
+
+**Region — Saudi Arabia (Riyadh) `me-central-1`** for BOTH ECS + RDS (same region + same VPC). Chosen over UAE for data residency (Saudi PDPL — a Saudi client's fleet/GPS/driver data stays in-Kingdom), latency, and client optics. ⚠️ Riyadh is a **partner region** operated by SCCC (Saudi Cloud Computing Company) — onboarding/billing may go through the **SCCC / alibabacloud.sa** account, not the global alibabacloud.com console; and being a partner region, confirm the 4 vCPU/8 GB ECS family + RDS-for-PostgreSQL-with-PostGIS are actually offered there before committing. (UAE Dubai = `me-east-1`; only fall back to it if IT already has a UAE account and there's no residency requirement.)
+
+**Server — Alibaba Cloud ECS** (hosts Laravel backend + APIs)
+- Instance: 4 vCPU / 8 GB RAM
+- OS: Ubuntu 22.04
+- Storage: 100–200 GB SSD
+- Billing: monthly
+
+**Database — Alibaba Cloud RDS** (managed)
+- Engine: PostgreSQL, **PostGIS** enabled
+- Memory: 2–4 GB · Storage: 50–100 GB SSD
+- Automatic backups on · same region as ECS
+- Est. ~$30–50/month
+
+**Account access:** full/super access requested for `hussein.m.hammoud.ct@gmail.com`.
+
+**Also needed for prod:** a domain/subdomain (e.g. `fleet.unimac.sa`) + SSL cert; Google Maps API key tied to a billing-enabled project and restricted to the prod domain; production frontend URL added to `config/cors.php`.
+
+> **⚠️ TimescaleDB vs PostGIS discrepancy — UNRESOLVED.** This doc assumes **TimescaleDB** for the
+> time-series hypertables (§6, §11), but the RDS request to IT is **PostGIS-only**. Alibaba RDS for
+> PostgreSQL may not offer the TimescaleDB extension. **Decide before provisioning:** either confirm
+> TimescaleDB is available on Alibaba RDS, or accept plain PostgreSQL + PostGIS (the time-series tables
+> already work as plain tables — TimescaleDB is an optimization, not a hard requirement; the
+> `create_hypertable` step in "Still Needed" would then be skipped).
+
+**Outdated in the original email:** it requested "DESCO/DSCO platform access" — obsolete, DSCO was retired and replaced by Safee (Alrakeen + saudiX); creds already in hand.
 
 ---
 

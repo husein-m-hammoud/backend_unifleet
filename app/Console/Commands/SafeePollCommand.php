@@ -5,7 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Category;
 use App\Models\Driver;
 use App\Models\Geofence;
-use App\Models\Site;
+use App\Models\ProviderSite;
 use App\Models\Trip;
 use App\Models\Vehicle;
 use App\Models\VehicleDriverAssignment;
@@ -46,6 +46,12 @@ class SafeePollCommand extends Command
 
     public function handle(): int
     {
+        // The full poll's trip/telemetry step (step 7) can exceed PHP's default
+        // 128M and fatal mid-run, which silently freezes trips + fuel while live
+        // positions keep flowing. Raise the ceiling so a full sync always finishes.
+        // Override via SAFEE_POLL_MEMORY_LIMIT if a bigger fleet needs more.
+        ini_set('memory_limit', env('SAFEE_POLL_MEMORY_LIMIT', '512M'));
+
         $providers = $this->argument('provider')
             ? [$this->argument('provider')]
             : array_keys(config('services.safee.providers', []));
@@ -101,10 +107,13 @@ class SafeePollCommand extends Command
             $this->syncSites();
             $this->syncCategories();
             $this->syncGeofences();
+            (new \App\Services\ZoneSiteSyncService())->run(); // canonical zones/sites by name
             $this->syncDrivers();
             $this->syncVehicles();
             $newPositionVehicleIds = $this->syncLiveState();
             $this->runAlertEngine($newPositionVehicleIds);
+            $this->runSignalStateSweep();
+            $this->runZonePresenceSweep();
             $this->syncTripsAndTelemetry();
 
             if ($this->option('backfill')) {
@@ -196,7 +205,7 @@ class SafeePollCommand extends Command
 
         foreach ($rows as $row) {
             $seenIds[] = $row['id'];
-            Site::updateOrCreate(
+            ProviderSite::updateOrCreate(
                 ['provider' => $this->provider, 'dsco_site_id' => $row['id']],
                 [
                     'name'              => $row['name'],
@@ -206,7 +215,7 @@ class SafeePollCommand extends Command
             );
         }
 
-        $this->disableMissing(Site::class, 'dsco_site_id', $seenIds);
+        $this->disableMissing(ProviderSite::class, 'dsco_site_id', $seenIds);
         $this->line("[Safee:{$this->provider}] Sites synced: " . count($seenIds));
     }
 
@@ -316,7 +325,17 @@ class SafeePollCommand extends Command
         $now     = now();
         $seenIds = [];
 
+        // Vehicles a manager explicitly deleted — never re-create them from the API.
+        $blocked = \Illuminate\Support\Facades\DB::table('vehicle_blocklist')
+            ->where('provider', $this->provider)
+            ->pluck('dsco_vehicle_id')
+            ->flip();
+
         foreach ($rows as $row) {
+            if ($blocked->has($row['id'])) {
+                continue; // deleted; skip re-import
+            }
+
             $seenIds[] = $row['id'];
 
             $localDriverId = null;
@@ -509,6 +528,37 @@ class SafeePollCommand extends Command
         } catch (\Throwable $e) {
             Log::error('[AlertEngine] Failed: ' . $e->getMessage(), ['exception' => $e]);
             $this->warn('[AlertEngine] Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Signal-lost / restored detection. Runs over ALL active vehicles of this
+     * provider (not just ones that reported) so vehicles that went dark are
+     * still detected. Cheap enough for the 5-min full poll.
+     */
+    private function runSignalStateSweep(): void
+    {
+        try {
+            $ids = Vehicle::active()->where('provider', $this->provider)->pluck('id')->all();
+            (new AlertEngineService())->checkSignalState($ids);
+        } catch (\Throwable $e) {
+            Log::error('[AlertEngine] Signal sweep failed: ' . $e->getMessage(), ['exception' => $e]);
+            $this->warn('[AlertEngine] Signal sweep error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Promote any provisional unauthorized-zone presence whose vehicle has
+     * overstayed or gone offline inside the zone. Runs over ALL open presences,
+     * catching vehicles that dropped out of the incremental poll.
+     */
+    private function runZonePresenceSweep(): void
+    {
+        try {
+            (new AlertEngineService())->sweepZonePresences();
+        } catch (\Throwable $e) {
+            Log::error('[AlertEngine] Zone presence sweep failed: ' . $e->getMessage(), ['exception' => $e]);
+            $this->warn('[AlertEngine] Zone presence sweep error: ' . $e->getMessage());
         }
     }
 

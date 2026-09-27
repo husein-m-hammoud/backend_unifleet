@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Alert;
 use App\Models\Vehicle;
 use App\Models\VehiclePosition;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class VehicleController extends Controller
 {
@@ -22,6 +24,39 @@ class VehicleController extends Controller
             ->map(fn ($v) => $this->formatVehicle($v));
 
         return response()->json($vehicles);
+    }
+
+    /**
+     * GET /api/vehicles/device-conflicts
+     *
+     * Data-integrity check: two (or more) of the user's vehicles that report the
+     * SAME physical tracker (device IMEI). This normally means a device was moved
+     * between vehicles and one record is stale. Grouped by IMEI. Scoped via
+     * vehicleQuery() so a user only sees conflicts within their own fleet.
+     */
+    public function deviceConflicts(Request $request): JsonResponse
+    {
+        $vehicles = $request->user()->vehicleQuery()
+            ->whereNotNull('device_imei')
+            ->where('device_imei', '!=', '')
+            ->get(['id', 'plate_no', 'provider', 'device_imei', 'dsco_device_id', 'status']);
+
+        $groups = $vehicles
+            ->groupBy('device_imei')
+            ->filter(fn ($group) => $group->count() > 1)
+            ->map(fn ($group, $imei) => [
+                'imei'      => (string) $imei,
+                'device_id' => $group->first()->dsco_device_id,
+                'vehicles'  => $group->map(fn ($v) => [
+                    'id'       => $v->id,
+                    'plate_no' => $v->plate_no,
+                    'provider' => $v->provider,
+                    'status'   => $v->status,
+                ])->values(),
+            ])
+            ->values();
+
+        return response()->json(['data' => $groups]);
     }
 
     /**
@@ -47,12 +82,12 @@ class VehicleController extends Controller
         // Map each vehicle to its site (keyed by provider + Safee site id) so the
         // frontend can offer a Sites filter.
         $providers = $request->user()->vehicleQuery()->distinct()->pluck('provider');
-        $siteMap   = \App\Models\Site::whereIn('provider', $providers)
+        $siteMap   = \App\Models\ProviderSite::whereIn('provider', $providers)
             ->get()
             ->keyBy(fn ($s) => $s->provider . '|' . $s->dsco_site_id);
 
         $vehicles = $request->user()->vehicleQuery()
-            ->with('currentDriver')
+            ->with(['currentDriver', 'zones.site'])
             ->get()
             ->map(function ($vehicle) use ($positions, $siteMap) {
                 $pos  = $positions->get($vehicle->id);
@@ -60,12 +95,20 @@ class VehicleController extends Controller
                 return [
                     'id'             => $vehicle->id,
                     'dsco_id'        => $vehicle->dsco_vehicle_id,
+                    'provider'       => $vehicle->provider,
                     'plate_no'       => $vehicle->plate_no,
                     'type'           => $vehicle->type,
                     'status'         => $vehicle->status,
                     'site'           => $site
                         ? ['id' => $site->id, 'name' => $site->name]
                         : null,
+                    // Assigned canonical zones (+ their site) for the map's zone/site
+                    // filter. Empty = unrestricted.
+                    'zones'          => $vehicle->zones->map(fn ($z) => [
+                        'id'      => $z->id,
+                        'name'    => $z->name,
+                        'site_id' => $z->site_id,
+                    ])->values(),
                     'driver'         => $vehicle->currentDriver
                         ? ['id' => $vehicle->currentDriver->id, 'name' => $vehicle->currentDriver->name]
                         : null,
@@ -150,7 +193,7 @@ class VehicleController extends Controller
             ->first();
 
         $site = $vehicle->dsco_site_id
-            ? \App\Models\Site::where('provider', $vehicle->provider)
+            ? \App\Models\ProviderSite::where('provider', $vehicle->provider)
                 ->where('dsco_site_id', $vehicle->dsco_site_id)
                 ->first()
             : null;
@@ -265,11 +308,68 @@ class VehicleController extends Controller
 
     // -------------------------------------------------------------------------
 
+    /**
+     * DELETE /api/vehicles/{id}
+     *
+     * Permanently remove a vehicle and its related telemetry (positions, trips,
+     * speed/weight logs, zone links — all CASCADE) plus its alerts. Saved reports
+     * are kept as historical snapshots (their vehicle_id is auto-nulled).
+     *
+     * Guards:
+     *  - manager-only (owner/admin);
+     *  - only a vehicle with NO SIGNAL may be deleted (latest fix older than the
+     *    no_signal threshold, or no fix at all) — you can't delete a live vehicle;
+     *  - the (provider, dsco_vehicle_id) is added to the block-list so the poller
+     *    never re-creates it on the next sync.
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user->isManager()) {
+            abort(403, 'Only managers can delete vehicles.');
+        }
+
+        // Scoped lookup — 404 if this user can't see the vehicle.
+        $vehicle = $user->vehicleQuery()->where('id', $id)->firstOrFail();
+
+        // No-data guard (mirror of the frontend rule, enforced server-side):
+        // only a vehicle the API returns NO position/telemetry for may be deleted.
+        $hasData = VehiclePosition::where('vehicle_id', $vehicle->id)
+            ->where('lat', '!=', 0)
+            ->exists();
+
+        if ($hasData) {
+            abort(422, 'This vehicle still has position data from the API. Only vehicles with no data can be deleted.');
+        }
+
+        DB::transaction(function () use ($vehicle, $user) {
+            // Delete its alerts (FK is SET NULL by default; we remove them for a clean delete).
+            Alert::where('vehicle_id', $vehicle->id)->delete();
+
+            // Prevent the poller from re-creating it from the provider API.
+            DB::table('vehicle_blocklist')->updateOrInsert(
+                ['provider' => $vehicle->provider, 'dsco_vehicle_id' => $vehicle->dsco_vehicle_id],
+                ['plate_no' => $vehicle->plate_no, 'blocked_by' => $user->id, 'updated_at' => now(), 'created_at' => now()],
+            );
+
+            // Delete the vehicle — cascades to positions/trips/telemetry/zone links.
+            $vehicle->delete();
+        });
+
+        return response()->json([
+            'message'  => 'Vehicle deleted.',
+            'id'       => $id,
+            'plate_no' => $vehicle->plate_no,
+        ]);
+    }
+
     private function formatVehicle(Vehicle $v): array
     {
         return [
             'id'            => $v->id,
             'dsco_id'       => $v->dsco_vehicle_id,
+            'provider'      => $v->provider,
             'plate_no'      => $v->plate_no,
             'type'          => $v->type,
             'make'          => $v->vehicle_make,

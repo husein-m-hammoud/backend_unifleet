@@ -97,6 +97,11 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Force the session timezone to UTC so timestamptz columns (the
+            // time-series `time` column) store true UTC instants. Without this
+            // the session inherits the server tz (e.g. Asia/Beirut) and Laravel's
+            // naive datetime strings get reinterpreted, shifting stored instants.
+            'timezone' => env('DB_TIMEZONE', 'UTC'),
         ],
 
         'sqlsrv' => [

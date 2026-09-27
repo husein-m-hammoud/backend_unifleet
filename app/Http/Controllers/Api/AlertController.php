@@ -54,4 +54,30 @@ class AlertController extends Controller
 
         return response()->json(['message' => 'Resolved', 'resolved_at' => $alert->resolved_at]);
     }
+
+    /**
+     * POST /api/alerts/resolve-all?from=ISO&to=ISO&type=over_speed
+     * Resolve every still-open alert matching the same filters as the list.
+     */
+    public function resolveAll(Request $request): JsonResponse
+    {
+        $vehicleIds = $request->user()->vehicleQuery()->pluck('id');
+
+        $query = Alert::whereIn('vehicle_id', $vehicleIds)
+            ->whereNull('resolved_at');
+
+        if ($request->from) {
+            $query->where('triggered_at', '>=', $request->from);
+        }
+        if ($request->to) {
+            $query->where('triggered_at', '<=', $request->to);
+        }
+        if ($request->type) {
+            $query->where('type', $request->type);
+        }
+
+        $count = $query->update(['resolved_at' => now()]);
+
+        return response()->json(['message' => 'Resolved', 'resolved' => $count]);
+    }
 }

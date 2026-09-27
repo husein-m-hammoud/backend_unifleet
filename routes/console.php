@@ -18,3 +18,14 @@ Artisan::command('inspire', function () {
 // Both poll all configured providers (Alrakeen now, saudiX later).
 Schedule::command('safee:poll --live-only')->everyThirtySeconds()->withoutOverlapping();
 Schedule::command('safee:poll')->everyFiveMinutes()->withoutOverlapping();
+
+// Freshness watchdog — raises a self-resolving `poll_stale` alert if telemetry
+// goes stale (dead scheduler, provider outage). Guards against the pipeline
+// silently dying unnoticed (as it did for 14 days in Sep 2026).
+Schedule::command('safee:health')->hourly();
+
+// Emailed fleet report digests — recipients come from the `report_email_recipients`
+// setting (no-op when unset). Times are Asia/Riyadh; the weekly digest runs Sunday
+// (start of the Saudi work week) and covers the previous 7 days.
+Schedule::command('reports:email daily')->dailyAt('06:00')->timezone('Asia/Riyadh');
+Schedule::command('reports:email weekly')->weeklyOn(0, '06:30')->timezone('Asia/Riyadh');

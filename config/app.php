@@ -16,6 +16,12 @@ return [
     'name' => env('APP_NAME', 'Laravel'),
 
     /*
+    | Base URL of the React SPA. Used to build password-reset links that point at
+    | the frontend reset page (not the API). Override via FRONTEND_URL in .env.
+    */
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:8089'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

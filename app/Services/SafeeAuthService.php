@@ -69,7 +69,14 @@ class SafeeAuthService
 
     private function fetchToken(): string
     {
-        $response = Http::asForm()->post($this->authUrl(), [
+        // Fail fast if the provider is unreachable: cURL's default connect
+        // timeout is ~300s, so with no limit here one dead provider hangs every
+        // poll for 5 minutes (this is what wedged the poller during the Sep 2026
+        // Alrakeen outage). Cap connect at 10s and the whole exchange at 20s.
+        $response = Http::asForm()
+            ->connectTimeout(10)
+            ->timeout(20)
+            ->post($this->authUrl(), [
             'grant_type'    => 'password',
             'client_id'     => $this->cfg['client_id'],
             'client_secret' => $this->cfg['client_secret'],

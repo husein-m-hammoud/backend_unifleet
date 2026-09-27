@@ -75,6 +75,7 @@ class SafeeApiService
     private function dispatch(string $method, string $endpoint, array $data, string $token, int $timeoutSeconds)
     {
         $http = Http::asJson()
+            ->connectTimeout(10)   // fail fast on an unreachable provider (cURL default is ~300s)
             ->timeout($timeoutSeconds)
             ->withHeaders([
                 'Authorization' => "Bearer {$token}",

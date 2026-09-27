@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Geofence extends Model
 {
     protected $fillable = [
+        'zone_id',
         'provider',
         'dsco_geofence_id',
         'dsco_uuid',
@@ -28,5 +30,11 @@ class Geofence extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', 'active');
+    }
+
+    /** Canonical zone this provider geofence rolls up into (by name). */
+    public function zone(): BelongsTo
+    {
+        return $this->belongsTo(Zone::class);
     }
 }

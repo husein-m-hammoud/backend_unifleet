@@ -49,6 +49,24 @@ return [
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
+        // Alibaba Cloud DirectMail — SMTP transport (planned prod mailer; keeps
+        // email in-region for PDPL, pay-as-you-go). Set MAIL_MAILER=directmail in
+        // prod .env. Host is region-specific: international/Gulf accounts use
+        // smtpdm-ap-southeast-1.aliyun.com (mainland = smtpdm.aliyun.com); confirm
+        // the endpoint for the Riyadh/SCCC region. Username = a verified sender
+        // address you created in DirectMail (e.g. no-reply@fleet.unimac.sa);
+        // password = that sender's SMTP password. Port 465 + smtps (SSL).
+        'directmail' => [
+            'transport' => 'smtp',
+            'scheme' => env('DIRECTMAIL_SCHEME', 'smtps'),
+            'host' => env('DIRECTMAIL_HOST', 'smtpdm-ap-southeast-1.aliyun.com'),
+            'port' => env('DIRECTMAIL_PORT', 465),
+            'username' => env('DIRECTMAIL_USERNAME'),
+            'password' => env('DIRECTMAIL_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+        ],
+
         'ses' => [
             'transport' => 'ses',
         ],

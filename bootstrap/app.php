@@ -19,6 +19,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Trust Sanctum token auth on API routes
         $middleware->statefulApi();
+
+        // Route guards: manager-only routes + per-page grants for scoped users.
+        $middleware->alias([
+            'manager' => \App\Http\Middleware\EnsureManager::class,
+            'page'    => \App\Http\Middleware\EnsurePageAccess::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

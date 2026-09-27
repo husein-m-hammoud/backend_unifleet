@@ -31,10 +31,19 @@ class DashboardController extends Controller
             ->orderByDesc('time')
             ->get();
 
-        $movingCount  = $latestPositions->where('speed', '>', 0)->count();
-        $idlingCount  = $latestPositions->where('ignition_status', 'IgnitionOn')
+        // A vehicle whose newest fix is older than this has a dead/offline tracker —
+        // its last speed/ignition reading is stale, so it's "No signal", not live.
+        // Admin-configurable (hours) via `no_signal_threshold_hours`; keep the
+        // frontend (src/lib/api.ts) and AlertEngineService in sync with this.
+        $noSignalMin = max(5, (int) round(((float) \App\Models\Setting::get('no_signal_threshold_hours', 24)) * 60));
+        $staleBefore = now()->subMinutes($noSignalMin);
+        $live        = $latestPositions->filter(fn ($p) => $p->time && $p->time->gt($staleBefore));
+
+        $noSignalCount = $latestPositions->count() - $live->count();
+        $movingCount   = $live->where('speed', '>', 0)->count();
+        $idlingCount   = $live->where('ignition_status', 'IgnitionOn')
                             ->where('speed', 0)->count();
-        $offCount     = $latestPositions->where('ignition_status', 'IgnitionOff')->count();
+        $offCount      = $live->where('ignition_status', 'IgnitionOff')->count();
 
         // Today's trips
         $todayTrips = Trip::whereIn('vehicle_id', $vehicleIds)
@@ -59,9 +68,10 @@ class DashboardController extends Controller
                 'total'    => $vehicleIds->count(),
                 'active'   => $activeVehicles,
                 'disabled' => $disabledVehicles,
-                'moving'   => $movingCount,
-                'idling'   => $idlingCount,
-                'off'      => $offCount,
+                'moving'    => $movingCount,
+                'idling'    => $idlingCount,
+                'off'       => $offCount,
+                'no_signal' => $noSignalCount,
             ],
             'today' => [
                 'trips'         => $todayTrips,

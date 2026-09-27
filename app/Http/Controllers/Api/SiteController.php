@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Site;
+use App\Models\ProviderSite;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -24,7 +24,7 @@ class SiteController extends Controller
             ->distinct()
             ->pluck('dsco_site_id');
 
-        $query = Site::active()
+        $query = ProviderSite::active()
             ->whereIn('dsco_site_id', $siteIds)
             ->orderBy('name');
 

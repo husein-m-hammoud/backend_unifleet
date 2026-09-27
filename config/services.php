@@ -39,7 +39,8 @@ return [
     | Safee Tracking REST Service (v2.2.0.0) — the platform DSCO also runs on.
     | One entry per partner company. Auth URL is derived per-provider as:
     |   {server_uri}/auth/realms/{realm}/protocol/openid-connect/token
-    | Add saudiX (and future companies) as new keys under `providers`.
+    | To onboard a new company, add a new key under `providers` with its own
+    | SAFEE_<NAME>_* env vars — the poller and services pick it up automatically.
     */
     'safee' => [
         'default'   => env('SAFEE_DEFAULT_PROVIDER', 'alrakeen'),
@@ -53,15 +54,6 @@ return [
                 'username'      => env('SAFEE_ALRAKEEN_USERNAME'),
                 'password'      => env('SAFEE_ALRAKEEN_PASSWORD'),
             ],
-            // 'saudix' => [
-            //     'label'         => 'saudiX',
-            //     'server_uri'    => env('SAFEE_SAUDIX_SERVER_URI'),
-            //     'realm'         => env('SAFEE_SAUDIX_REALM', 'saudix'),
-            //     'client_id'     => env('SAFEE_SAUDIX_CLIENT_ID', 'api'),
-            //     'client_secret' => env('SAFEE_SAUDIX_CLIENT_SECRET'),
-            //     'username'      => env('SAFEE_SAUDIX_USERNAME'),
-            //     'password'      => env('SAFEE_SAUDIX_PASSWORD'),
-            // ],
         ],
     ],
 
