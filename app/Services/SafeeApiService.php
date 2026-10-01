@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ProviderApiFailure;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -59,15 +60,38 @@ class SafeeApiService
     {
         $send = fn (string $token) => $this->dispatch($method, $endpoint, $data, $token, $timeoutSeconds);
 
-        $response = $send($this->auth->getToken());
-
-        // Token expired — clear cache and retry once with a fresh token.
-        if ($response->status() === 401) {
-            $this->auth->forgetToken();
+        try {
             $response = $send($this->auth->getToken());
+
+            // Token expired — clear cache and retry once with a fresh token.
+            if ($response->status() === 401) {
+                $this->auth->forgetToken();
+                $response = $send($this->auth->getToken());
+            }
+        } catch (\Throwable $e) {
+            // Connect timeout / DNS / TLS, or an auth failure thrown from
+            // getToken(). Recorded so the diagnostics page can show when this
+            // provider went dark; auth failures are logged by SafeeAuthService
+            // itself, so only tag transport failures here.
+            if (! $e instanceof \Illuminate\Http\Client\RequestException) {
+                ProviderApiFailure::record($this->auth->provider(), 'request', $endpoint, null, $e->getMessage());
+            }
+            throw $e;
+        }
+
+        if ($response->failed()) {
+            ProviderApiFailure::record(
+                $this->auth->provider(),
+                'request',
+                $endpoint,
+                $response->status(),
+                $response->body(),
+            );
         }
 
         $response->throw();
+
+        ProviderApiFailure::markSuccess($this->auth->provider());
 
         return $response;
     }

@@ -24,6 +24,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'manager' => \App\Http\Middleware\EnsureManager::class,
             'page'    => \App\Http\Middleware\EnsurePageAccess::class,
+            // Stricter than `manager` (which admins pass): diagnostics expose
+            // logs and config state, so they are owner-only.
+            'owner'   => \App\Http\Middleware\EnsureOwner::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

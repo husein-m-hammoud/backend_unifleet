@@ -68,4 +68,25 @@ return [
         'model'   => 'claude-sonnet-4-20250514',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Ops alerting (for US, not the client)
+    |--------------------------------------------------------------------------
+    |
+    | Where `safee:health` sends "the pipeline is stale" notices.
+    |
+    | Email is the only channel for now, and it is IGNORED while MAIL_MAILER=log
+    | (a log file nobody watches cannot page anyone). Until a real mailer is
+    | configured, a dead pipeline is detected and logged but not delivered —
+    | `unifleet:doctor` reports this as a failing `ops_alerts` check.
+    |
+    */
+    'ops' => [
+        'email' => env('OPS_ALERT_EMAIL'),
+
+        // Optional shared secret for the full detail of GET /api/health. Without
+        // it that endpoint stays terse (status + failing check names only).
+        'health_token' => env('OPS_HEALTH_TOKEN'),
+    ],
+
 ];

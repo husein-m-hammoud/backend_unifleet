@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DiagnosticsController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\GeofenceController;
 use App\Http\Controllers\Api\ReportController;
@@ -21,6 +22,11 @@ Route::prefix('auth')->group(function () {
     Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('reset-password', [AuthController::class, 'resetPassword']);
 });
+
+// Unauthenticated health check for an external uptime monitor. Terse by design;
+// pass OPS_HEALTH_TOKEN (?token= or X-Health-Token) for the full report.
+// Returns 503 when a check fails so monitors alert on it.
+Route::get('health', [DiagnosticsController::class, 'health']);
 
 // ─── Authenticated ────────────────────────────────────────────────────────────
 Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshSafeeToken::class])->group(function () {
@@ -104,6 +110,16 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshSafeeToken::class
         Route::get('reports',       [ReportController::class, 'index']);
         Route::post('reports',      [ReportController::class, 'store']);
         Route::get('reports/{id}',  [ReportController::class, 'show'])->whereNumber('id');
+    });
+
+    // Diagnostics / System page — OWNER ONLY. Exposes log contents, config
+    // state and provider failure history, so it is gated by role, not by the
+    // absence of a nav link.
+    Route::middleware('owner')->prefix('admin/diagnostics')->group(function () {
+        Route::get('/',           [DiagnosticsController::class, 'index']);
+        Route::get('logs',        [DiagnosticsController::class, 'logs']);
+        Route::get('failures',    [DiagnosticsController::class, 'failures']);
+        Route::post('test-alert', [DiagnosticsController::class, 'testAlert']);
     });
 
     // Settings

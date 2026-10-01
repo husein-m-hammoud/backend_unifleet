@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -19,10 +20,26 @@ Artisan::command('inspire', function () {
 Schedule::command('safee:poll --live-only')->everyThirtySeconds()->withoutOverlapping();
 Schedule::command('safee:poll')->everyFiveMinutes()->withoutOverlapping();
 
+// Scheduler heartbeat — stamps "the scheduler ticked" once a minute. This is
+// how `unifleet:doctor` and the System page can tell "the poller found nothing"
+// apart from "nothing is running at all", which is the distinction that made the
+// Sep 2026 outage invisible for 14 days. Cheap: one cache write per minute.
+Schedule::call(function () {
+    Cache::put(
+        \App\Services\SystemHealthService::HEARTBEAT_KEY,
+        now()->toIso8601String(),
+        now()->addDays(7),
+    );
+})->everyMinute()->name('scheduler-heartbeat')->withoutOverlapping();
+
 // Freshness watchdog — raises a self-resolving `poll_stale` alert if telemetry
-// goes stale (dead scheduler, provider outage). Guards against the pipeline
-// silently dying unnoticed (as it did for 14 days in Sep 2026).
+// goes stale (dead scheduler, provider outage) AND notifies us via OpsNotifier.
+// Guards against the pipeline silently dying unnoticed (as it did for 14 days in
+// Sep 2026).
 Schedule::command('safee:health')->hourly();
+
+// Keep provider_api_failures bounded (30-day retention).
+Schedule::command('unifleet:doctor --prune')->weeklyOn(1, '04:00')->timezone('Asia/Riyadh');
 
 // Emailed fleet report digests — recipients come from the `report_email_recipients`
 // setting (no-op when unset). Times are Asia/Riyadh; the weekly digest runs Sunday

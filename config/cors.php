@@ -16,7 +16,20 @@ return [
         // Add your production frontend URL here when deploying
     ],
 
-    'allowed_origins_patterns' => [],
+    /*
+     * Loopback origins on ANY port — dev only.
+     *
+     * Vite silently falls back to the next free port (8089 -> 8090 -> 8091) when
+     * its configured one is taken, and the resulting blocked preflight surfaces
+     * in the browser as a generic "CORS error / Failed to fetch" with almost no
+     * response headers — which is very hard to read as "wrong port".
+     *
+     * Scoped to localhost/127.0.0.1 and disabled in production, so it can never
+     * widen the real deployment: prod origins must be listed explicitly above.
+     */
+    'allowed_origins_patterns' => env('APP_ENV') === 'production' ? [] : [
+        '#^http://(localhost|127\.0\.0\.1)(:\d+)?$#',
+    ],
 
     'allowed_headers' => ['*'],
 

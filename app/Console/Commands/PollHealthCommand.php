@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Alert;
 use App\Models\Setting;
+use App\Services\OpsNotifier;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -91,6 +92,26 @@ class PollHealthCommand extends Command
         Log::warning("[Safee] Poller appears STALE: {$reason} (threshold {$threshold}h). Is schedule:work running?", $meta);
         $this->error("STALE: {$reason} (threshold {$threshold}h). Newest trip: " . ($newestTrip ?? 'none') . '.');
 
+        // Detection without delivery is what made the Sep 2026 outage last 14
+        // days. Dedupe on the alert (not the run) so an ongoing outage notifies
+        // every 6 hours rather than every hour.
+        $delivered = OpsNotifier::send(
+            'Telemetry has gone stale',
+            "UNIFLEET is not receiving fresh data.\n\n"
+            . "Reason: {$reason}\n"
+            . 'Last fix: ' . ($lastFix ?? 'never') . "\n"
+            . 'Newest trip: ' . ($newestTrip ?? 'none') . "\n"
+            . "Threshold: {$threshold}h\n\n"
+            . 'Check: is `schedule:run` in crontab, and is the provider reachable? '
+            . 'Run `php artisan unifleet:doctor` for the full picture.',
+            dedupeKey: 'poll_stale',
+            cooldownMinutes: 360,
+        );
+
+        if ($delivered !== []) {
+            $this->line('Notified via ' . implode(' + ', $delivered) . '.');
+        }
+
         return self::FAILURE;
     }
 
@@ -100,7 +121,9 @@ class PollHealthCommand extends Command
      */
     private function recover(): void
     {
-        Alert::where('type', 'poll_stale')->whereNull('resolved_at')->get()->each(function (Alert $a) {
+        $resolved = Alert::where('type', 'poll_stale')->whereNull('resolved_at')->get();
+
+        $resolved->each(function (Alert $a) {
             $a->update([
                 'resolved_at' => now(),
                 'meta'        => array_merge($a->meta ?? [], [
@@ -109,6 +132,22 @@ class PollHealthCommand extends Command
                 ]),
             ]);
         });
+
+        // Only announce recovery if we actually announced a problem — otherwise
+        // every healthy hourly run would send an all-clear.
+        if ($resolved->isNotEmpty()) {
+            OpsNotifier::send(
+                'Telemetry is back',
+                "UNIFLEET is receiving fresh data again. The stale-pipeline alert has been resolved.",
+            );
+
+            // Clear the cooldown so the next genuine outage notifies immediately.
+            try {
+                \Illuminate\Support\Facades\Cache::forget('ops_notice_poll_stale');
+            } catch (\Throwable $e) {
+                // Non-fatal.
+            }
+        }
     }
 
     private function human(float $hours): string
