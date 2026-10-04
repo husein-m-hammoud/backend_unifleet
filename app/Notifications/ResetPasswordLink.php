@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\ResolvesEventRecipients;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -11,7 +12,14 @@ use Illuminate\Notifications\Notification;
  */
 class ResetPasswordLink extends Notification
 {
+    use ResolvesEventRecipients;
+
     public function __construct(public string $token) {}
+
+    public function emailEvent(): string
+    {
+        return 'password_reset_link';
+    }
 
     public function via(object $notifiable): array
     {
@@ -24,11 +32,13 @@ class ResetPasswordLink extends Notification
             . '/reset-password?token=' . $this->token
             . '&email=' . urlencode($notifiable->getEmailForPasswordReset());
 
-        return (new MailMessage())
+        $mail = (new MailMessage())
             ->subject('Reset your UNIFLEET password')
             ->greeting('Hello ' . ($notifiable->name ?? '') . ',')
             ->line('You (or an administrator) requested a password reset for your UNIFLEET account.')
             ->action('Set a new password', $url)
             ->line('This link expires in 60 minutes. If you did not request this, you can ignore this email.');
+
+        return $this->applyCc($mail, $notifiable);
     }
 }

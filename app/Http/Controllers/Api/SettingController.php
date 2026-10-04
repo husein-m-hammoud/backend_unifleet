@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmailEvent;
 use App\Models\Setting;
 use App\Models\SettingChangelog;
 use App\Models\Site;
@@ -185,6 +186,102 @@ class SettingController extends Controller
      * canonical site. Effective priority when a vehicle is inside a site:
      * site limit > type override > global default.
      */
+    /**
+     * GET /api/settings/email-events
+     *
+     * Per-event email recipients. `to`/`cc` are additive for events that have a
+     * natural recipient (the user an account belongs to) and are the whole
+     * recipient list for fleet-wide events.
+     */
+    public function emailEvents(): JsonResponse
+    {
+        $rows = EmailEvent::all()->keyBy('event');
+
+        $events = collect(EmailEvent::EVENTS)->map(function ($meta, $key) use ($rows) {
+            $row = $rows->get($key);
+
+            return [
+                'event'       => $key,
+                'label'       => $meta['label'],
+                'description' => $meta['description'],
+                // Null means the event has no automatic recipient, so an empty
+                // `to` stops it being sent at all — the UI needs to say so.
+                'primary'     => $meta['primary'],
+                'credentials' => $meta['credentials'],
+                'enabled'     => $row ? (bool) $row->enabled : true,
+                'to'          => $row->to ?? '',
+                'cc'          => $row->cc ?? '',
+                'updated_at'  => $row?->updated_at?->toIso8601String(),
+            ];
+        })->values();
+
+        return response()->json([
+            'events'       => $events,
+            'mailer'       => config('mail.default'),
+            'from_address' => config('mail.from.address'),
+            // Surfaced so the UI can warn that nothing is actually delivered yet.
+            'deliverable'  => config('mail.default') !== 'log',
+        ]);
+    }
+
+    /**
+     * PUT /api/settings/email-events
+     *
+     * Body: { events: { <event>: { enabled?: bool, to?: string, cc?: string } } }
+     *
+     * Address lists accept commas, semicolons or whitespace. Invalid entries are
+     * dropped and reported back rather than silently stored, so a typo cannot
+     * quietly stop an email reaching someone.
+     */
+    public function updateEmailEvents(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'events'             => ['required', 'array'],
+            'events.*.enabled'   => ['sometimes', 'boolean'],
+            'events.*.to'        => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'events.*.cc'        => ['sometimes', 'nullable', 'string', 'max:2000'],
+        ]);
+
+        $rejected = [];
+
+        foreach ($data['events'] as $event => $values) {
+            if (! EmailEvent::isKnown($event)) {
+                $rejected[$event] = ['unknown event'];
+                continue;
+            }
+
+            $row = EmailEvent::config($event);
+
+            foreach (['to', 'cc'] as $field) {
+                if (! array_key_exists($field, $values)) {
+                    continue;
+                }
+
+                $invalid = EmailEvent::invalidIn($values[$field]);
+
+                if ($invalid !== []) {
+                    $rejected[$event][$field] = $invalid;
+                }
+
+                $row->{$field} = EmailEvent::normalise($values[$field]);
+            }
+
+            if (array_key_exists('enabled', $values)) {
+                $row->enabled = (bool) $values['enabled'];
+            }
+
+            $row->updated_by = $request->user()->id;
+            $row->save();
+        }
+
+        return response()->json([
+            'message'  => 'Email recipients updated.',
+            // Addresses that were not valid emails and were therefore dropped.
+            'rejected' => $rejected,
+            'events'   => $this->emailEvents()->getData(true)['events'],
+        ]);
+    }
+
     public function speedLimits(Request $request): JsonResponse
     {
         $default       = (int) Setting::get('speed_limit', 120);

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\EmailEvent;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -39,7 +40,7 @@ class OpsNotifier
 
         // A `log` mailer delivers to a file nobody watches, so it does not count
         // as a channel for alerting purposes.
-        if (config('services.ops.email') && config('mail.default') !== 'log') {
+        if (self::emailRecipients()['to'] !== [] && config('mail.default') !== 'log') {
             $channels[] = 'email';
         }
 
@@ -98,12 +99,44 @@ class OpsNotifier
         }
     }
 
+    /**
+     * Recipients for the `ops_alert` event, falling back to the legacy
+     * OPS_ALERT_EMAIL env var so an install configured before per-event
+     * recipients existed keeps working.
+     *
+     * @return array{to:list<string>,cc:list<string>}
+     */
+    private static function emailRecipients(): array
+    {
+        $resolved = EmailEvent::recipients('ops_alert');
+
+        if ($resolved['to'] === []) {
+            $legacy = EmailEvent::parse((string) config('services.ops.email'));
+
+            if ($legacy !== [] && $resolved['enabled']) {
+                $resolved['to'] = $legacy;
+            }
+        }
+
+        return ['to' => $resolved['to'], 'cc' => $resolved['cc']];
+    }
+
     private static function sendEmail(string $subject, string $body): bool
     {
         try {
-            Mail::raw($body, function ($message) use ($subject) {
-                $message->to(config('services.ops.email'))
+            $recipients = self::emailRecipients();
+
+            if ($recipients['to'] === []) {
+                return false;
+            }
+
+            Mail::raw($body, function ($message) use ($subject, $recipients) {
+                $message->to($recipients['to'])
                     ->subject("[UNIFLEET] {$subject}");
+
+                if ($recipients['cc'] !== []) {
+                    $message->cc($recipients['cc']);
+                }
             });
 
             return true;

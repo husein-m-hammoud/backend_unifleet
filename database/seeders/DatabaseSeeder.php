@@ -16,6 +16,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(EmailEventsSeeder::class);
+
         // Default admin account. Logs in locally (no provider) and sees every
         // vehicle/site/alert across all providers merged. Temporary until a
         // proper user-management screen exists.

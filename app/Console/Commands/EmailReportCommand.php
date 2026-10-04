@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\EmailEvent;
 use App\Models\Setting;
 use App\Models\Vehicle;
 use App\Notifications\ReportDigest;
@@ -31,14 +32,28 @@ class EmailReportCommand extends Command
             return self::INVALID;
         }
 
-        $recipients = collect(preg_split('/[,;\s]+/', (string) Setting::get('report_email_recipients', '')))
-            ->map(fn ($e) => trim($e))
-            ->filter(fn ($e) => $e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL))
-            ->unique()
-            ->values();
+        // Recipients come from the per-event email config. These events have no
+        // natural recipient, so an empty `to` means "don't send".
+        $event    = "report_{$period}";
+        $resolved = EmailEvent::recipients($event);
 
-        if ($recipients->isEmpty()) {
-            $this->info('No valid recipients in report_email_recipients — nothing to send.');
+        // Back-compat: fall back to the old single `report_email_recipients`
+        // setting for installs configured before per-event recipients existed.
+        if ($resolved['to'] === []) {
+            $legacy = EmailEvent::parse((string) Setting::get('report_email_recipients', ''));
+
+            if ($legacy !== []) {
+                $resolved['to'] = $legacy;
+            }
+        }
+
+        if (! $resolved['enabled']) {
+            $this->info("Email event [{$event}] is disabled — nothing to send.");
+            return self::SUCCESS;
+        }
+
+        if ($resolved['to'] === []) {
+            $this->info("No recipients configured for [{$event}] — nothing to send.");
             return self::SUCCESS;
         }
 
@@ -61,17 +76,22 @@ class EmailReportCommand extends Command
         $url = rtrim((string) config('app.frontend_url'), '/')
             . '/dashboard/ai?from=' . $start->format('Y-m-d') . '&to=' . $end->format('Y-m-d');
 
-        $sent = 0;
-        foreach ($recipients as $addr) {
-            try {
-                Notification::route('mail', $addr)->notify(new ReportDigest($payload, $type, $label, $url));
-                $sent++;
-            } catch (\Throwable $e) {
-                Log::warning("[reports:email] failed for {$addr}: {$e->getMessage()}");
-            }
+        // ONE email addressed to every recipient, with the configured CC — not a
+        // separate email each, so recipients can see they share the report and a
+        // CC actually behaves like a CC.
+        try {
+            Notification::route('mail', $resolved['to'])
+                ->notify(new ReportDigest($payload, $type, $label, $url));
+        } catch (\Throwable $e) {
+            Log::warning("[reports:email] {$event} failed: {$e->getMessage()}");
+            $this->error("Send failed: {$e->getMessage()}");
+
+            return self::FAILURE;
         }
 
-        $this->info("Sent {$type} report ({$label}) to {$sent}/{$recipients->count()} recipient(s).");
+        $cc = $resolved['cc'] === [] ? '' : ' (cc ' . implode(', ', $resolved['cc']) . ')';
+        $this->info("Sent {$type} report ({$label}) to " . implode(', ', $resolved['to']) . $cc . '.');
+
         return self::SUCCESS;
     }
 }

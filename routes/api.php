@@ -133,12 +133,14 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshSafeeToken::class
         // swallowed by PUT settings/{key}.
         Route::get('idle-thresholds',      [SettingController::class, 'idleThresholds']);
         Route::get('speed-limits',         [SettingController::class, 'speedLimits']);
+        Route::get('email-events',         [SettingController::class, 'emailEvents']);
         Route::get('{key}/changelog',      [SettingController::class, 'changelog']);
         // Writes are manager-only. Reads stay open — thresholds are read app-wide
         // (dashboard, fuel, alerts, map) to hydrate client-side status logic.
         Route::middleware('manager')->group(function () {
             Route::put('idle-thresholds',  [SettingController::class, 'updateIdleThresholds']);
             Route::put('speed-limits',     [SettingController::class, 'updateSpeedLimits']);
+            Route::put('email-events',     [SettingController::class, 'updateEmailEvents']);
             Route::put('{key}',            [SettingController::class, 'update']);
         });
     });

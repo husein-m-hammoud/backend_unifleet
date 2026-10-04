@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\ResolvesEventRecipients;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -13,6 +14,8 @@ use Illuminate\Notifications\Notification;
  */
 class ReportDigest extends Notification
 {
+    use ResolvesEventRecipients;
+
     /**
      * @param array  $data        AnalyticsService::insights() payload
      * @param string $periodType  'Daily' | 'Weekly'
@@ -25,6 +28,11 @@ class ReportDigest extends Notification
         public string $periodLabel,
         public string $url,
     ) {}
+
+    public function emailEvent(): string
+    {
+        return strtolower($this->periodType) === 'weekly' ? 'report_weekly' : 'report_daily';
+    }
 
     public function via(object $notifiable): array
     {
@@ -68,8 +76,10 @@ class ReportDigest extends Notification
             }
         }
 
-        return $mail
+        $mail
             ->action('View full report', $this->url)
             ->line('This is an automated report from UNIFLEET Fleet Intelligence.');
+
+        return $this->applyCc($mail, $notifiable);
     }
 }

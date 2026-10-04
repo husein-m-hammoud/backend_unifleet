@@ -110,6 +110,31 @@ class User extends Authenticatable
         $this->notify(new \App\Notifications\ResetPasswordLink($token));
     }
 
+    /**
+     * Mail recipients for a notification: this user, plus any extra To addresses
+     * configured for the notification's email event.
+     *
+     * This override is the ONLY place extra To addresses can be added —
+     * MailChannel reads the To from the notifiable's route, not from the
+     * MailMessage (CC/BCC are read from the message; see the
+     * ResolvesEventRecipients trait).
+     *
+     * @return string|array<string>
+     */
+    public function routeNotificationForMail($notification = null)
+    {
+        // Notifications that aren't event-aware keep the plain behaviour.
+        if (! $notification || ! method_exists($notification, 'emailEvent')) {
+            return $this->email;
+        }
+
+        $resolved = \App\Models\EmailEvent::recipients($notification->emailEvent(), $this->email);
+
+        // A disabled event yields no recipients; returning [] makes MailChannel
+        // skip the send rather than mailing the wrong people.
+        return $resolved['to'];
+    }
+
     public function dscoToken(): HasOne
     {
         return $this->hasOne(DscoUserToken::class);

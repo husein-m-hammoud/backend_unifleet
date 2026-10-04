@@ -2,7 +2,7 @@
 ## Project Memory for Claude Code (VS Code)
 
 > Auto-loaded by Claude Code. Contains all project context, decisions, scope, and API reference.
-> Company: Cedars Technology | Client: UNIMAC | Last updated: Oct 2026 (session 14 — operational heatmap §3.5 delivered; session 13 — observability/diagnostics)
+> Company: Cedars Technology | Client: UNIMAC | Last updated: Oct 2026 (session 15 — per-event email recipients To+CC; session 14 — heatmap §3.5; session 13 — observability)
 
 > **⚠️ saudiX DECOMMISSIONED (2026-08-24):** saudiX is **no longer a partner** and was
 > **fully removed** — its `services.safee.providers.saudix` config + `SAFEE_SAUDIX_*` env,
@@ -650,6 +650,17 @@ Every vehicle/driver/site/alert/dashboard query funnels through `$user->vehicleQ
 ---
 
 ## 12. Pending / Open Items
+
+### Done (session 15 — 2026-10-04, per-event email recipients — To + CC)
+- [x] **`email_events` table + `EmailEvent` model** (migration `2026_10_04_000001`): `event` (unique), `enabled`, `to`, `cc` (comma-separated text), `updated_by`. **`EmailEvent::EVENTS` is the single registry** the API, UI, notifications and console commands all read, so a new email cannot drift out of sync with its config. Six events: `account_created`, `password_changed`, `password_reset_link`, `report_daily`, `report_weekly`, `ops_alert`.
+- [x] **`to`/`cc` are ADDITIVE for person-centred events.** Each event declares a `primary` (e.g. "The new user") — that address is always first in the To, and the configured `to` adds to it. For fleet-wide events `primary` is null, so `to` IS the whole list and **an empty `to` means the email is not sent**. `recipients()` de-dupes and removes anyone already in To from the CC.
+- [x] **Where the To vs CC split had to happen** — `MailChannel` takes the **To from the notifiable's route**, not from the MailMessage (it reads only `cc`/`bcc` off the message, lines 218-227). So: extra **To** is applied in **`User::routeNotificationForMail($notification)`** (which does receive the notification, so it can resolve per-event), and **CC** in the new **`ResolvesEventRecipients`** trait that each notification mixes in. Getting this backwards silently drops recipients.
+- [x] **All four senders wired** — `AccountCredentials` (event depends on `$isNew`: `account_created` vs `password_changed`), `ResetPasswordLink`, `ReportDigest` (event from its period), and `OpsNotifier::sendEmail` (plain `Mail::raw` + `->cc()`).
+- [x] **`EmailReportCommand` now sends ONE email** to all recipients with the CC, instead of a separate email per address — so a CC behaves like a CC and recipients can see they share the report. Honours the `enabled` switch.
+- [x] **Back-compat, nothing silently stops being delivered** — `EmailEventsSeeder` copies the old `report_email_recipients` setting into `report_daily`/`report_weekly` and `OPS_ALERT_EMAIL` into `ops_alert`; both senders also fall back to the legacy value at runtime if the new `to` is empty. `firstOrCreate`, so re-seeding never overwrites an admin's edits.
+- [x] **`GET/PUT /api/settings/email-events`** (`SettingController`, registered **before** `settings/{key}`; reads open, **writes manager-only — verified 403 for `role=user`**). Address lists accept commas, semicolons or whitespace. **Invalid addresses are dropped AND reported back in `rejected`** rather than silently stored — a typo would otherwise mean someone never gets the email and nobody knows why. Response also carries `mailer`/`deliverable` so the UI can warn that nothing is delivered while `MAIL_MAILER=log`.
+- [x] **⚠️ Security note surfaced, not hidden:** `account_created`, `password_changed` and `password_reset_link` carry a **plaintext password or a reset link**, so anyone added to `to`/`cc` can read them — and for a reset link that means they could take the account over. Each event carries a `credentials` flag; the UI shows a "contains password / reset link" badge and a warning under the CC field. Implemented as asked (the client explicitly wanted CC on account creation) with the risk made visible. **A safer follow-up** would be a credential-free "an account was created for X" copy for CC recipients.
+- **VERIFIED LIVE against the real mail pipeline, not just linted:** `GET` returns all 6 events; `PUT` with mixed `,`/`;` separators + one bad address stored the good ones and returned `rejected: {account_created: {cc: ['NOT-AN-EMAIL']}}`; a real daily report wrote **`To: ops@unimac.sa, boss@unimac.sa` / `Cc: archive@unimac.sa`** to the log; creating a real user wrote **`To: cctest@unimac.sa, hr@unimac.sa` / `Cc: manager@unimac.sa, it@unimac.sa`** — the user's own address first, exactly as specified; `enabled=false` made `reports:email daily` refuse to send. Temp user deleted and all test recipients reset to empty afterwards.
 
 ### Done (session 14 — 2026-10-04, operational heatmap — contract §3.5 DELIVERED)
 > **⚠️ Built, then HIDDEN from the UI the same day at the client's request.** The code is

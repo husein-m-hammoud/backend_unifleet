@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\ResolvesEventRecipients;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -13,6 +14,8 @@ use Illuminate\Notifications\Notification;
  */
 class AccountCredentials extends Notification
 {
+    use ResolvesEventRecipients;
+
     public function __construct(
         public string $username,
         public string $password,
@@ -22,6 +25,12 @@ class AccountCredentials extends Notification
     public function via(object $notifiable): array
     {
         return ['mail'];
+    }
+
+    /** A new account and an admin-reset password are configured separately. */
+    public function emailEvent(): string
+    {
+        return $this->isNew ? 'account_created' : 'password_changed';
     }
 
     public function toMail(object $notifiable): MailMessage
@@ -38,10 +47,12 @@ class AccountCredentials extends Notification
             $mail->line('Your UNIFLEET password has been reset. Here are your new sign-in details:');
         }
 
-        return $mail
+        $mail
             ->line('**Username:** ' . $this->username)
             ->line('**Password:** ' . $this->password)
             ->action('Sign in', $loginUrl)
             ->line('For your security, please change this password after signing in.');
+
+        return $this->applyCc($mail, $notifiable);
     }
 }
