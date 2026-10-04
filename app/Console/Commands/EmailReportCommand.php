@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\EmailEvent;
-use App\Models\Setting;
 use App\Models\Vehicle;
 use App\Notifications\ReportDigest;
 use App\Services\AnalyticsService;
@@ -13,10 +12,11 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 /**
- * Emails a daily or weekly fleet report digest to the addresses configured in the
- * `report_email_recipients` setting. Scheduled from routes/console.php; a no-op
- * (exit 0) when no recipients are set. The report covers the WHOLE fleet — it is
- * not scoped to any user.
+ * Emails a daily or weekly fleet report digest to the recipients configured for
+ * the `report_daily` / `report_weekly` email events (Settings -> Email
+ * notifications). Scheduled from routes/console.php; a no-op (exit 0) when the
+ * event is switched off or has no recipients. The report covers the WHOLE fleet —
+ * it is not scoped to any user.
  */
 class EmailReportCommand extends Command
 {
@@ -36,16 +36,6 @@ class EmailReportCommand extends Command
         // natural recipient, so an empty `to` means "don't send".
         $event    = "report_{$period}";
         $resolved = EmailEvent::recipients($event);
-
-        // Back-compat: fall back to the old single `report_email_recipients`
-        // setting for installs configured before per-event recipients existed.
-        if ($resolved['to'] === []) {
-            $legacy = EmailEvent::parse((string) Setting::get('report_email_recipients', ''));
-
-            if ($legacy !== []) {
-                $resolved['to'] = $legacy;
-            }
-        }
 
         if (! $resolved['enabled']) {
             $this->info("Email event [{$event}] is disabled — nothing to send.");

@@ -9,7 +9,8 @@ use Illuminate\Notifications\Notification;
 /**
  * Scheduled daily/weekly fleet report digest — a short summary (fleet health,
  * headline KPIs, top findings) with a button through to the full report on the
- * dashboard. Sent on-demand to the addresses in the `report_email_recipients`
+ * dashboard. Sent to the recipients configured for its `report_daily` /
+ * `report_weekly` email event (Settings -> Email notifications)
  * setting by the `reports:email` command.
  */
 class ReportDigest extends Notification

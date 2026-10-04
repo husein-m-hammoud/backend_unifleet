@@ -72,15 +72,9 @@ class SettingsSeeder extends Seeder
                 'group'       => 'data',
             ],
 
-            // ── Reports ───────────────────────────────────────────
-            [
-                'key'         => 'report_email_recipients',
-                'value'       => '',
-                'type'        => 'string',
-                'label'       => 'Report Email Recipients',
-                'description' => 'Comma-separated email addresses that receive the automated daily and weekly fleet report digests. Leave blank to disable scheduled report emails.',
-                'group'       => 'reports',
-            ],
+            // Report recipients used to live here as `report_email_recipients`.
+            // Superseded by per-event recipients (`email_events` + the Email
+            // notifications dialog), which cover To and CC for every email.
         ];
 
         foreach ($defaults as $setting) {

@@ -3,30 +3,25 @@
 namespace Database\Seeders;
 
 use App\Models\EmailEvent;
-use App\Models\Setting;
 use Illuminate\Database\Seeder;
 
 /**
  * Creates one row per known email event, idempotently.
  *
- * Also migrates the two pre-existing single-value configs into the new per-event
- * rows so nothing silently stops being delivered:
- *   report_email_recipients setting  -> report_daily.to + report_weekly.to
- *   OPS_ALERT_EMAIL env               -> ops_alert.to
+ * Seeds `ops_alert.to` from the legacy OPS_ALERT_EMAIL env var so an install
+ * configured before per-event recipients existed keeps alerting.
+ *
+ * (The old `report_email_recipients` setting was retired in migration
+ * 2026_10_04_000002, which copies any value it held into the report events.)
  */
 class EmailEventsSeeder extends Seeder
 {
     public function run(): void
     {
-        $legacyReports = EmailEvent::normalise((string) Setting::get('report_email_recipients', ''));
-        $legacyOps     = EmailEvent::normalise((string) config('services.ops.email'));
+        $legacyOps = EmailEvent::normalise((string) config('services.ops.email'));
 
         foreach (array_keys(EmailEvent::EVENTS) as $event) {
-            $to = match ($event) {
-                'report_daily', 'report_weekly' => $legacyReports,
-                'ops_alert'                     => $legacyOps,
-                default                         => null,
-            };
+            $to = $event === 'ops_alert' ? $legacyOps : null;
 
             // firstOrCreate, so re-running never overwrites what an admin has set.
             EmailEvent::firstOrCreate(
