@@ -141,6 +141,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshSafeeToken::class
             Route::put('idle-thresholds',  [SettingController::class, 'updateIdleThresholds']);
             Route::put('speed-limits',     [SettingController::class, 'updateSpeedLimits']);
             Route::put('email-events',     [SettingController::class, 'updateEmailEvents']);
+            Route::post('email-events/test', [SettingController::class, 'testEmailEvent']);
             Route::put('{key}',            [SettingController::class, 'update']);
         });
     });

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\EmailEvent;
+use Illuminate\Support\Facades\Mail;
 use App\Models\Setting;
 use App\Models\SettingChangelog;
 use App\Models\Site;
@@ -186,6 +187,103 @@ class SettingController extends Controller
      * canonical site. Effective priority when a vehicle is inside a site:
      * site limit > type override > global default.
      */
+    /**
+     * POST /api/settings/email-events/test
+     *
+     * Sends a real test email using one event's configured recipients, so
+     * "will this actually reach anyone?" is answered by trying it rather than
+     * by reading config. Manager-only.
+     *
+     * The signed-in manager's own address stands in as the event's `primary`,
+     * which is what gives the credential events a To at all (their real primary
+     * is whichever user the email is about). That also means a test can only ever
+     * be sent to the person asking for it, plus the CC they already configured.
+     */
+    public function testEmailEvent(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'event' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $event = $data['event'] ?? 'ops_alert';
+
+        if (! EmailEvent::isKnown($event)) {
+            return response()->json(['message' => "Unknown email event [{$event}]."], 422);
+        }
+
+        $meta = EmailEvent::EVENTS[$event];
+        $me   = $request->user()->email;
+
+        // The tester stands in as `primary` ONLY for events that have one — a
+        // credential email has no real target user during a test. For fleet-wide
+        // events (reports, ops alerts) there is no primary, so injecting the
+        // tester would make the test pass while a real alert reached nobody.
+        // An empty result there is the truthful answer.
+        $resolved = EmailEvent::recipients($event, $meta['primary'] === null ? null : $me);
+
+        $mailer      = (string) config('mail.default');
+        $deliverable = $mailer !== 'log';
+
+        if (! $resolved['enabled']) {
+            return response()->json([
+                'event'   => $event,
+                'label'   => $meta['label'],
+                'message' => 'This email is switched off, so nothing would be sent.',
+            ], 422);
+        }
+
+        if ($resolved['to'] === []) {
+            return response()->json([
+                'event'   => $event,
+                'label'   => $meta['label'],
+                'message' => $meta['primary'] === null
+                    ? 'No recipients configured for this email, so nothing would be sent. Add an address to "Send to" first.'
+                    : 'Your own account has no email address, so there is nowhere to send the test.',
+            ], 422);
+        }
+
+        $body = "This is a test email from UNIFLEET.\n\n"
+            . "Event: {$meta['label']}\n"
+            . 'Sent to: ' . implode(', ', $resolved['to']) . "\n"
+            . ($resolved['cc'] === [] ? '' : 'Copied to: ' . implode(', ', $resolved['cc']) . "\n")
+            . "\nIf you received this, the recipients for this event are working.";
+
+        try {
+            Mail::raw($body, function ($message) use ($resolved, $meta) {
+                $message->to($resolved['to'])
+                    ->subject("[UNIFLEET] Test — {$meta['label']}");
+
+                if ($resolved['cc'] !== []) {
+                    $message->cc($resolved['cc']);
+                }
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'event'     => $event,
+                'label'     => $meta['label'],
+                'delivered' => false,
+                'mailer'    => $mailer,
+                'to'        => $resolved['to'],
+                'cc'        => $resolved['cc'],
+                'message'   => 'Send failed: ' . $e->getMessage(),
+            ], 502);
+        }
+
+        return response()->json([
+            'event'     => $event,
+            'label'     => $meta['label'],
+            // False when the mailer is `log`: the send "succeeded" but went to a
+            // file, which must not read as delivered.
+            'delivered' => $deliverable,
+            'mailer'    => $mailer,
+            'to'        => $resolved['to'],
+            'cc'        => $resolved['cc'],
+            'message'   => $deliverable
+                ? 'Test email sent.'
+                : "Mailer is set to \"{$mailer}\", so the email was written to the server log instead of sent.",
+        ]);
+    }
+
     /**
      * GET /api/settings/email-events
      *
