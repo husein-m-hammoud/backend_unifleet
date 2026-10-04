@@ -105,6 +105,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshSafeeToken::class
     // AI Insights (deterministic analytics — no external LLM, no recurring cost)
     Route::get('analytics/insights', [AnalyticsController::class, 'insights'])->middleware('page:ai');
 
+    // Operational heatmap (contract §3.5) — GPS density cells, page-gated.
+    Route::get('analytics/heatmap', [AnalyticsController::class, 'heatmap'])->middleware('page:heatmap');
+
     // Reports (page-gated: scoped users need the 'reports' grant)
     Route::middleware('page:reports')->group(function () {
         Route::get('reports',       [ReportController::class, 'index']);

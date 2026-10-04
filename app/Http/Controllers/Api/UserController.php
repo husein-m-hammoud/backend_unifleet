@@ -26,7 +26,7 @@ class UserController extends Controller
      * (DashboardSidebar.tsx, 2026-09-09). Re-add 'fuel' here + in the frontend
      * GRANTABLE_PAGES (api.ts) when that nav link is restored.
      */
-    public const GRANTABLE_PAGES = ['dashboard', 'map', 'vehicles', 'alerts', 'ai', 'reports'];
+    public const GRANTABLE_PAGES = ['dashboard', 'map', 'vehicles', 'alerts', 'heatmap', 'ai', 'reports'];
 
     private const ROLES = ['owner', 'admin', 'user'];
 

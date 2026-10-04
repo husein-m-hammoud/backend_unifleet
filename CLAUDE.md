@@ -2,7 +2,7 @@
 ## Project Memory for Claude Code (VS Code)
 
 > Auto-loaded by Claude Code. Contains all project context, decisions, scope, and API reference.
-> Company: Cedars Technology | Client: UNIMAC | Last updated: Oct 2026 (session 13 — observability: unifleet:doctor, /api/health, OpsNotifier (email-only), provider_api_failures, owner-only System page)
+> Company: Cedars Technology | Client: UNIMAC | Last updated: Oct 2026 (session 14 — operational heatmap §3.5 delivered; session 13 — observability/diagnostics)
 
 > **⚠️ saudiX DECOMMISSIONED (2026-08-24):** saudiX is **no longer a partner** and was
 > **fully removed** — its `services.safee.providers.saudix` config + `SAFEE_SAUDIX_*` env,
@@ -650,6 +650,14 @@ Every vehicle/driver/site/alert/dashboard query funnels through `$user->vehicleQ
 ---
 
 ## 12. Pending / Open Items
+
+### Done (session 14 — 2026-10-04, operational heatmap — contract §3.5 DELIVERED)
+- [x] **`HeatmapService`** (`app/Services/`) — weighted GPS density cells from `vehicle_positions`. Aggregation happens **in SQL** (`round(lat::numeric, N)`, `round(lon::numeric, N)`, `count(*)`, `GROUP BY`), not PHP: ~58k fixes collapse to a few thousand cells, and sending raw points would be a multi-MB payload the browser has to bucket anyway. Uses the existing `(vehicle_id, time)` index. Filters `lat != 0` — Safee returns (0,0) for offline units and that coordinate is in the Gulf of Guinea, so it would plant a hotspot off Africa.
+- [x] **Built from GPS fixes, NOT geofences.** The contract says "heatmaps generated using Safee geofence data", but a geofence is a *drawn boundary* — it can only show where activity was **expected**, never where it happened. Density has to come from the fixes. **The old TODO note claiming the heatmap was blocked by "Alrakeen returns 0 geofences" was simply wrong** (there are 10, and it's the wrong input regardless).
+- [x] **`mode` = all | idle | moving** — `idle` (speed ≤ 2 km/h) is the view that earns its place: plain density makes a depot look busy whether vehicles are working or parked, while the idle view shows **where hours are burned standing still**. The 2 km/h floor rather than exactly 0 is because GPS jitter puts a stationary vehicle at 0.3–1.5 km/h. Verified on live data: idle = 23,475 fixes in 2,708 cells (depots), moving = 25,163 fixes across 13,558 cells (routes).
+- [x] **`GET /api/analytics/heatmap?from&to&mode&precision&zone&type`** (`AnalyticsController@heatmap`, `middleware('page:heatmap')`). Scoped via `vehicleQuery()` exactly like `insights()`, so a scoped user cannot see another zone's movements — the heatmap can't leak location data across grants. Returns `points[]`, `cell_count`, `cells_available` (pre-cap, so the UI can say "showing the top N"), `max_weight`, `total_fixes`, `bounds`, `precision`, `cell_size`, `vehicles_in_scope`.
+- [x] **`precision` default 3 (~110 m), clamped 2–5.** Measured on the live DB: p2=456 cells, **p3=2,794 (no truncation)**, p4=14,761 (capped to the 5,000 densest), p5=37,692. 3 is the default because it covers the whole fleet footprint uncapped — above it the returned `bounds` stop describing all the data. Precision is interpolated into the SQL (Postgres `round()` can't take a bound param for the scale), so it is **clamped to a safe int in the service** as well as validated in the controller. Payload at p3 ≈ 107 KB.
+- [x] **`heatmap` added to `UserController::GRANTABLE_PAGES`** (and the frontend `GRANTABLE_PAGES`) so scoped users can be granted it.
 
 ### Done (session 13 — 2026-10-01, observability / diagnostics)
 - [x] **`SystemHealthService`** (`app/Services/`) — THE single source of truth for "is UNIFLEET healthy?". Read by all three consumers so they can never disagree: `unifleet:doctor`, `GET /api/health`, `GET /api/admin/diagnostics`. 14 checks: `app_env` (fails on APP_DEBUG=true in production), `php`, `database`, `migrations` (dir-vs-table diff, cheaper than `migrate:status`), `last_position` (vs `poll_stale_threshold_hours`), `last_trip`, `scheduler` (heartbeat), `providers`, `queue`, `disk`, `logs`, `mail`, `ops_alerts`, `open_alerts` — plus `counts` (vehicles/positions/trips/alerts/zones/users). **Design rule: every check is individually wrapped in `guard()`** so one broken subsystem degrades to a single `fail` row instead of taking down the whole report — a diagnostics tool that crashes is useless exactly when needed. Status vocabulary: `ok` | `warn` (works but wrong for prod) | `fail`.
