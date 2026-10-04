@@ -22,11 +22,11 @@ class UserController extends Controller
 {
     /**
      * Page keys a scoped `user` may be granted. Managers see everything.
-     * NB: 'fuel' is omitted — the Fuel Management page is hidden from the sidebar
-     * (DashboardSidebar.tsx, 2026-09-09). Re-add 'fuel' here + in the frontend
+     * NB: 'fuel' and 'heatmap' are omitted — both pages are hidden from the sidebar
+     * (DashboardSidebar.tsx; fuel 2026-09-09, heatmap 2026-10-04). Re-add them here + in the frontend
      * GRANTABLE_PAGES (api.ts) when that nav link is restored.
      */
-    public const GRANTABLE_PAGES = ['dashboard', 'map', 'vehicles', 'alerts', 'heatmap', 'ai', 'reports'];
+    public const GRANTABLE_PAGES = ['dashboard', 'map', 'vehicles', 'alerts', 'ai', 'reports'];
 
     private const ROLES = ['owner', 'admin', 'user'];
 
