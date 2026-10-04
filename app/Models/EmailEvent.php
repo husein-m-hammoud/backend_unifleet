@@ -27,9 +27,13 @@ class EmailEvent extends Model
      *   primary      — who automatically receives it (null = recipients come only
      *                  from `to`, so an empty `to` means it is not sent)
      *   credentials  — true when the body contains a password or a reset link.
-     *                  Anyone added to `to`/`cc` can read it, which for a reset
-     *                  link means they could take the account over. Surfaced as a
-     *                  warning in the UI rather than silently allowed.
+     *   extra_to     — false forbids ADDING To recipients. The three credential
+     *                  emails are addressed to one person on purpose: a second
+     *                  To address makes a password or an account-takeover link
+     *                  look like it was legitimately sent to that person. CC is
+     *                  still allowed (an explicit copy reads as a copy), which is
+     *                  the distinction the client asked for. Enforced in
+     *                  `recipients()` AND in the API, not just hidden in the UI.
      */
     public const EVENTS = [
         'account_created' => [
@@ -37,38 +41,50 @@ class EmailEvent extends Model
             'description' => 'Sent when a manager creates a user with "Email account setup" enabled.',
             'primary'     => 'The new user',
             'credentials' => true,
+            'extra_to'    => false,
         ],
         'password_changed' => [
             'label'       => 'Password changed by a manager',
             'description' => 'Sent when a manager generates and emails a new password for a user.',
             'primary'     => 'The affected user',
             'credentials' => true,
+            'extra_to'    => false,
         ],
         'password_reset_link' => [
             'label'       => 'Forgot-password reset link',
             'description' => 'Sent when someone uses "Forgot password?" on the login screen.',
             'primary'     => 'The requesting user',
             'credentials' => true,
+            'extra_to'    => false,
         ],
         'report_daily' => [
             'label'       => 'Daily fleet report',
             'description' => 'Scheduled 06:00 Asia/Riyadh, covering the previous day.',
             'primary'     => null,
             'credentials' => false,
+            'extra_to'    => true,
         ],
         'report_weekly' => [
             'label'       => 'Weekly fleet report',
             'description' => 'Scheduled Sunday 06:30 Asia/Riyadh, covering the previous 7 days.',
             'primary'     => null,
             'credentials' => false,
+            'extra_to'    => true,
         ],
         'ops_alert' => [
             'label'       => 'System & telemetry alerts',
             'description' => 'Pipeline gone stale / back online, and the diagnostics test alert. Goes to whoever maintains the system.',
             'primary'     => null,
             'credentials' => false,
+            'extra_to'    => true,
         ],
     ];
+
+    /** Whether extra To recipients may be configured for this event. */
+    public static function allowsExtraTo(string $event): bool
+    {
+        return (bool) (self::EVENTS[$event]['extra_to'] ?? true);
+    }
 
     public static function isKnown(string $event): bool
     {
@@ -108,7 +124,10 @@ class EmailEvent extends Model
                 return $empty;
             }
 
-            $to = static::parse($row->to);
+            // A credential email is addressed to exactly one person; any stored
+            // `to` is ignored here as well as blocked at the API, so an older row
+            // or a direct DB edit cannot widen it.
+            $to = static::allowsExtraTo($event) ? static::parse($row->to) : [];
 
             if ($primary !== null && filter_var($primary, FILTER_VALIDATE_EMAIL)) {
                 // The person the email is about always comes first.

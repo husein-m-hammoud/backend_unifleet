@@ -208,6 +208,9 @@ class SettingController extends Controller
                 // `to` stops it being sent at all — the UI needs to say so.
                 'primary'     => $meta['primary'],
                 'credentials' => $meta['credentials'],
+                // False => the UI must not offer an extra-To field, and the API
+                // rejects one. CC stays available.
+                'extra_to'    => EmailEvent::allowsExtraTo($key),
                 'enabled'     => $row ? (bool) $row->enabled : true,
                 'to'          => $row->to ?? '',
                 'cc'          => $row->cc ?? '',
@@ -254,6 +257,18 @@ class SettingController extends Controller
 
             foreach (['to', 'cc'] as $field) {
                 if (! array_key_exists($field, $values)) {
+                    continue;
+                }
+
+                // Credential emails are addressed to one person only. Refuse to
+                // store extra To recipients even if a client sends them —
+                // hiding the field in the UI is not a control.
+                if ($field === 'to' && ! EmailEvent::allowsExtraTo($event)) {
+                    if (EmailEvent::normalise($values[$field]) !== null) {
+                        $rejected[$event]['to'] = ['this email is sent to one recipient only — use CC'];
+                    }
+
+                    $row->to = null;
                     continue;
                 }
 
