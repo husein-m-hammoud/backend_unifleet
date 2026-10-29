@@ -17,7 +17,37 @@ As of 2026-10-29 no ECS instance or RDS instance has been provisioned, and all
 development has taken place on the developer's local machine. The change log in
 section 4 is therefore empty by design, not by omission.
 
-## 2. Approval policy (effective 2026-10-29)
+## 2. Infrastructure inventory
+
+Recorded from the Alibaba Cloud console on 2026-10-29.
+
+| Item | Value |
+| --- | --- |
+| ECS instance ID | `i-l4vcygds2ltikyfva6ij` |
+| Instance name | not set |
+| Instance type | `ecs.hfc6.xlarge` — 4 vCPU / 8 GiB |
+| Public bandwidth | 5 Mbps |
+| Network type | VPC |
+| Public IP | `8.213.39.81` — auto-assigned (not an Elastic IP) |
+| Private IP (VPC) | `192.168.0.197` |
+| Billing method | Subscription |
+| Region | TO CONFIRM — expected Saudi Arabia (Riyadh) `me-central-1` |
+| Created / expires | TO CONFIRM |
+| RDS instance | Not provisioned |
+| Operating system | TO CONFIRM |
+
+Notes:
+- The public IP is **auto-assigned, not an EIP**. Acceptable for DNS because a
+  Subscription VPC instance retains its public IP across a stop/start. A later
+  conversion to an EIP retains the same address, so DNS is unaffected; the
+  benefit of converting is being able to move the address to a replacement
+  instance. Not done — requires approval.
+- 5 Mbps is the public bandwidth cap (~600 KB/s aggregate). Adequate for the
+  dashboard and API; may throttle concurrent PDF/Excel report downloads.
+- Subscription expiry must be tracked — an unrenewed subscription stops the
+  instance.
+
+## 3. Approval policy (effective 2026-10-29)
 
 The following are **never** performed without prior written approval from the
 system owner (Hussein Hammoud), who obtains client/IT approval where required:
@@ -34,13 +64,13 @@ system owner (Hussein Hammoud), who obtains client/IT approval where required:
 | Encryption / TLS | issuing, installing or replacing certificates |
 
 Routine, non-exposing work proceeds without per-item approval but is still
-logged in section 4: application code deploys, log inspection, running
+logged in section 5: application code deploys, log inspection, running
 read-only diagnostics (`php artisan unifleet:doctor`, `GET /api/health`).
 
-**Change record requirement:** every entry in section 4 states date, who
+**Change record requirement:** every entry in section 5 states date, who
 requested it, who approved it, what was changed, why, and how to roll it back.
 
-## 3. Ports that will be requested (not yet open, not yet approved)
+## 4. Ports that will be requested (not yet open, not yet approved)
 
 Listed here so IT can review the full intended surface in advance. Each one
 still requires explicit approval before it is enabled.
@@ -55,7 +85,7 @@ still requires explicit approval before it is enabled.
 Intentionally **not** requested: no public database port, no public Redis, no
 FTP, no control-panel ports.
 
-## 4. Change log
+## 5. Change log
 
 | Date | Change | Requested by | Approved by | Rollback |
 | --- | --- | --- | --- | --- |
