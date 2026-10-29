@@ -3,7 +3,8 @@
 **To:** UNIMAC IT
 **From:** Hussein Hammoud, Cedars Technology
 **Date:** 2026-10-29
-**Target server:** ECS `i-l4vcygds2ltikyfva6ij` (`8.213.39.81`), VPC `192.168.0.197`
+**Target server:** ECS `i-l4vcygds2ltikyfva6ij` (`8.213.39.81`), VPC `192.168.0.197`,
+Ubuntu 22.04, Saudi Arabia (Riyadh)
 **Purpose:** list every change required to bring the UNIFLEET platform live, so
 IT can review and approve the whole set in advance. Nothing in this document has
 been done. Each item is performed only after approval, and each is recorded in
@@ -36,8 +37,8 @@ Redis, FTP, or any control-panel port.
 
 | # | Change | Purpose |
 | --- | --- | --- |
-| C1 | A record `fleet.unimac.sa` → `8.213.39.81` | Requested separately |
-| C2 | TLS certificate for `fleet.unimac.sa` | Either Let's Encrypt issued on the box (needs A2 open) or a certificate IT supplies — IT's choice |
+| C1 | A record `fleet.unimaccompany.com` → `8.213.39.81` | **IT action** — UNIMAC controls the domain |
+| C2 | TLS certificate for `fleet.unimaccompany.com` | Installed on this server either way. Option 1: we issue free Let's Encrypt on the box, auto-renewing (needs C1 live and A2 open) — no IT action. Option 2: IT supplies a certificate and private key and we install it, with IT tracking renewal. IT's choice. |
 | C3 | Force HTTPS; HTTP serves only the redirect | No application traffic in clear text |
 
 ## D. Software installed on the server
@@ -82,17 +83,15 @@ The server initiates these; none of them require an inbound port.
 
 | # | Change | Purpose |
 | --- | --- | --- |
-| G1 | An external uptime monitor polling `https://fleet.unimac.sa/api/health` every 1–5 minutes | The endpoint returns HTTP 503 when the platform is unhealthy, so the monitor raises the alarm. It must run **outside** this server — that is the whole point: it keeps working when the server is the problem. In September 2026 the data pipeline was dead for 14 days with nothing to report it. The endpoint exposes a pass/fail status only, no fleet or personal data. |
+| G1 | An external uptime monitor polling `https://fleet.unimaccompany.com/api/health` every 1–5 minutes | The endpoint returns HTTP 503 when the platform is unhealthy, so the monitor raises the alarm. It must run **outside** this server — that is the whole point: it keeps working when the server is the problem. In September 2026 the data pipeline was dead for 14 days with nothing to report it. The endpoint exposes a pass/fail status only, no fleet or personal data. |
 
 ## H. Items needed from UNIMAC IT
 
 | # | Item | Why |
 | --- | --- | --- |
-| H1 | **Google Maps API key** — the one Faysal sent by email | The live map and all geofence rendering depend on it. Required: a billing-enabled Google Cloud project, and the key **restricted to `fleet.unimac.sa`** rather than unrestricted. An unrestricted key can be copied from the page source and billed to UNIMAC by anyone. |
+| H1 | **Google Maps API key** — the one Faysal sent by email | The live map and all geofence rendering depend on it. Required: a billing-enabled Google Cloud project, and the key **restricted to `fleet.unimaccompany.com`** rather than unrestricted. An unrestricted key can be copied from the page source and billed to UNIMAC by anyone. |
 | H2 | RDS connection endpoint, port, engine version and the application credentials | To configure the application |
-| H3 | Confirmation of the ECS region and subscription expiry date | Compliance record; an unrenewed subscription stops the server |
-| H4 | Operating system and version on the ECS instance | Determines the package set in section D |
-| H5 | IT's choice on C2 (Let's Encrypt or IT-supplied certificate) and on A3 (restricted SSH or bastion/VPN) | Both are IT's call, not ours |
+| H3 | IT's choice on C2 (Let's Encrypt or IT-supplied certificate) and on A3 (restricted SSH or bastion/VPN) | Both are IT's call, not ours |
 
 ## I. Security commitments
 

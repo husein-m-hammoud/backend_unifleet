@@ -32,11 +32,12 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | Network type | VPC |
 | Public IP | `8.213.39.81` — auto-assigned (not an Elastic IP) |
 | Private IP (VPC) | `192.168.0.197` |
+| Domain | `fleet.unimaccompany.com` (DNS managed by UNIMAC IT) |
 | Billing method | Subscription |
-| Region | TO CONFIRM — expected Saudi Arabia (Riyadh) `me-central-1` |
-| Created / expires | TO CONFIRM |
-| RDS instance | Created 2026-10-29 by UNIMAC IT — endpoint, engine version, PostGIS status TO CONFIRM |
-| Operating system | TO CONFIRM |
+| Region | Saudi Arabia (Riyadh) `me-central-1` — confirmed |
+| Subscription expiry | 2027-09-30 18:59:59 |
+| RDS instance | Created — endpoint, engine version, PostGIS status TO CONFIRM |
+| Operating system | Ubuntu 22.04 LTS x64 (image `ubuntu_22_04_x64_20G_alibase_20260810.vhd`) |
 
 Notes:
 - The public IP is **auto-assigned, not an EIP**. Acceptable for DNS because a
@@ -46,8 +47,11 @@ Notes:
   instance. Not done — requires approval.
 - 5 Mbps is the public bandwidth cap (~600 KB/s aggregate). Adequate for the
   dashboard and API; may throttle concurrent PDF/Excel report downloads.
-- Subscription expiry must be tracked — an unrenewed subscription stops the
-  instance.
+- Subscription expiry 2027-09-30 must be tracked — an unrenewed subscription
+  stops the instance. Confirm the expiration action is "stop", not "release".
+- System disk size is unconfirmed. The image reference is a 20 GB image and the
+  original request to IT was 100-200 GB SSD; position history grows continuously,
+  so the actual disk size and any attached data disk need checking.
 
 ## 3. Approval policy (effective 2026-10-29)
 
