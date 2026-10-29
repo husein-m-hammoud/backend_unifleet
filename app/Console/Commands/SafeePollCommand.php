@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\Log;
  *   php artisan safee:poll --backfill      # also pull GPS history
  *
  * Every synced reference/transactional row is stamped with its provider so that
- * Alrakeen and saudiX (which can share numeric IDs) never collide. Soft-disable
+ * Alrakeen and DSCO (which can share numeric IDs) never collide. Soft-disable
  * of missing entities is scoped per provider.
  */
 class SafeePollCommand extends Command
@@ -279,7 +279,7 @@ class SafeePollCommand extends Command
     }
 
     // -------------------------------------------------------------------------
-    // Step 4 — Drivers  (Alrakeen has none; saudiX may)
+    // Step 4 — Drivers  (Alrakeen has none; DSCO may)
     // -------------------------------------------------------------------------
 
     private function syncDrivers(): void

@@ -151,7 +151,7 @@ class User extends Authenticatable
      * Returns a query builder scoped to the vehicles this user can see.
      *
      * Managers (owner/admin) are provider-agnostic and see EVERY vehicle across
-     * all providers (Alrakeen + saudiX + …) merged into one fleet.
+     * all providers (Alrakeen + DSCO + …) merged into one fleet.
      *
      * A scoped `user` sees only vehicles assigned to one of their granted zones
      * (direct or via a granted site). No grants ⇒ sees nothing. Vehicles with no

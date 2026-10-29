@@ -13,9 +13,11 @@ for each one.
 ## 1. Current status
 
 **No changes have been made to any UNIMAC-managed server to date.**
-As of 2026-10-29 no ECS instance or RDS instance has been provisioned, and all
-development has taken place on the developer's local machine. The change log in
-section 4 is therefore empty by design, not by omission.
+An ECS instance has been provisioned by UNIMAC IT (see section 2) and read-only
+console inspection has been performed, but nothing on it has been installed,
+configured or modified, and no RDS instance exists yet. All development to date
+has taken place on the developer's local machine. The change log in section 5 is
+therefore empty by design, not by omission.
 
 ## 2. Infrastructure inventory
 

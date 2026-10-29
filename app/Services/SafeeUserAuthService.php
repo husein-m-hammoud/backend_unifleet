@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Per-user login against a Safee provider (Keycloak password grant), plus
  * transparent refresh-token handling. Users authenticate with their own Safee
- * credentials against the provider they pick at login (Alrakeen, saudiX, …);
+ * credentials against the provider they pick at login (Alrakeen, DSCO, …);
  * the provider they logged in through is stored on the user so that token
  * refresh and vehicle/site scoping always use the correct provider config.
  *

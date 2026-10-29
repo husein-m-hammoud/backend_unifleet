@@ -45,14 +45,32 @@ return [
     'safee' => [
         'default'   => env('SAFEE_DEFAULT_PROVIDER', 'alrakeen'),
         'providers' => [
-            'alrakeen' => [
-                'label'         => 'Alrakeen',
-                'server_uri'    => env('SAFEE_ALRAKEEN_SERVER_URI', 'https://tk.alrakeen.sa'),
-                'realm'         => env('SAFEE_ALRAKEEN_REALM', 'alrakeen'),
-                'client_id'     => env('SAFEE_ALRAKEEN_CLIENT_ID', 'api'),
-                'client_secret' => env('SAFEE_ALRAKEEN_CLIENT_SECRET'),
-                'username'      => env('SAFEE_ALRAKEEN_USERNAME'),
-                'password'      => env('SAFEE_ALRAKEEN_PASSWORD'),
+            // Alrakeen — PAUSED 2026-10-29 (no longer working with them for now).
+            // Credentials stay in .env; uncomment this block to resume polling.
+            // Anything that enumerates providers (poller, safee:health, doctor,
+            // diagnostics) picks it back up automatically.
+            // 'alrakeen' => [
+            //     'label'         => 'Alrakeen',
+            //     'server_uri'    => env('SAFEE_ALRAKEEN_SERVER_URI', 'https://tk.alrakeen.sa'),
+            //     'realm'         => env('SAFEE_ALRAKEEN_REALM', 'alrakeen'),
+            //     'client_id'     => env('SAFEE_ALRAKEEN_CLIENT_ID', 'api'),
+            //     'client_secret' => env('SAFEE_ALRAKEEN_CLIENT_SECRET'),
+            //     'username'      => env('SAFEE_ALRAKEEN_USERNAME'),
+            //     'password'      => env('SAFEE_ALRAKEEN_PASSWORD'),
+            // ],
+
+            // DSCO (Dimensions Systems) — the platform this project was first
+            // built against. Retired 2026-07 in favour of Alrakeen, re-onboarded
+            // 2026-10-24 as the second provider in place of saudiX. It is a Safee
+            // deployment like the others, so only the realm/host differ.
+            'dsco' => [
+                'label'         => 'DSCO',
+                'server_uri'    => env('SAFEE_DSCO_SERVER_URI', 'https://fms.dimensions-systems.com'),
+                'realm'         => env('SAFEE_DSCO_REALM', 'dsco'),
+                'client_id'     => env('SAFEE_DSCO_CLIENT_ID', 'api'),
+                'client_secret' => env('SAFEE_DSCO_CLIENT_SECRET'),
+                'username'      => env('SAFEE_DSCO_USERNAME'),
+                'password'      => env('SAFEE_DSCO_PASSWORD'),
             ],
         ],
     ],

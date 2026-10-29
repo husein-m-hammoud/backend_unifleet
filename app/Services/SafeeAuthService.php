@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Http;
 /**
  * Service-account (password grant) auth against a Safee Tracking provider.
  *
- * DSCO was one Safee deployment; Alrakeen and (later) saudiX are others. Each
+ * Each provider (Alrakeen, DSCO, …) is a separate Safee deployment. Each
  * provider has its own server_uri / realm / credentials in
  * config('services.safee.providers.*'). The access token is cached per provider.
  */
@@ -106,7 +106,15 @@ class SafeeAuthService
 
         $response->throw();
 
-        ProviderApiFailure::markSuccess($this->provider);
+        // NOTE: deliberately NOT calling ProviderApiFailure::markSuccess() here.
+        // A token exchange only proves Keycloak accepted the credentials — it
+        // says nothing about whether the provider will serve data. DSCO spent
+        // 2026-10-24..26 authenticating happily while every api/v2 call came
+        // back 401 "Unauthorized request", and because auth stamped success the
+        // doctor showed a green tick through the whole outage.
+        // Health is a DATA-PLANE claim, so only a successful API call marks it
+        // (see SafeeApiService::request()). Auth failures are still recorded
+        // below, so a broken login still shows up as a failure.
 
         return $response->json('access_token');
     }

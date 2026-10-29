@@ -58,6 +58,11 @@ class ProviderApiFailure extends Model
      *
      * A 30-day TTL means a long silence reads as "no recent success" instead of
      * quietly reporting a stale timestamp forever.
+     *
+     * CALL THIS ONLY AFTER A SUCCESSFUL DATA CALL (SafeeApiService), never after
+     * a bare token exchange. "Healthy" has to mean "served data": a provider can
+     * authenticate perfectly and still refuse every endpoint, which is precisely
+     * what DSCO did for two days while the doctor reported a green tick.
      */
     public static function markSuccess(string $provider): void
     {
