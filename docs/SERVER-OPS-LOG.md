@@ -35,7 +35,7 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | Billing method | Subscription |
 | Region | TO CONFIRM — expected Saudi Arabia (Riyadh) `me-central-1` |
 | Created / expires | TO CONFIRM |
-| RDS instance | Not provisioned |
+| RDS instance | Created 2026-10-29 by UNIMAC IT — endpoint, engine version, PostGIS status TO CONFIRM |
 | Operating system | TO CONFIRM |
 
 Notes:
