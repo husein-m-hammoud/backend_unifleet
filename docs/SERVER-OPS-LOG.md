@@ -30,6 +30,9 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | Instance type | `ecs.hfc6.xlarge` — 4 vCPU / 8 GiB |
 | Public bandwidth | 5 Mbps |
 | Network type | VPC |
+| VPC | `vpc-l4vo9dyye94qqyua8m0zx` — **same VPC as the RDS instance, confirmed 2026-10-31** |
+| vSwitch | `vsw-l4vx61t964z2rqto2pzuy` |
+| ECS auto-renewal | **Manual renewal — NOT auto-renewing** (see risk note below) |
 | Public IP | `8.213.39.81` — auto-assigned (not an Elastic IP) |
 | Private IP (VPC) | `192.168.0.197` |
 | Domain | `fleet.unimaccompany.com` (DNS managed by UNIMAC IT) |
@@ -67,10 +70,19 @@ Notes:
   stock PostgreSQL with no extensions, which also closes the long-standing
   "TimescaleDB vs PostGIS" question — neither is needed. Section B of the
   approval request has been corrected accordingly.
-- **ECS VPC ID still needs confirming against the RDS VPC.** RDS sits in
-  `vpc-l4vo9dyye94qqyua8m0zx`. If the ECS is in a different VPC the two cannot
-  reach each other at all, regardless of whitelist. Same zone (Riyadh A) is a
-  good sign but is not the same thing as the same VPC.
+- **ECS and RDS are in the same VPC** (`vpc-l4vo9dyye94qqyua8m0zx`), confirmed
+  from both consoles 2026-10-31. Private connectivity is therefore possible; the
+  remaining step is the RDS whitelist entry for `192.168.0.197`.
+- ⚠️ **Compounding data-loss risk, worth fixing with three clicks.** The ECS
+  subscription is on **manual renewal** while RDS is on auto-renewal, and both
+  expire 2027-09-30. If the ECS renewal is missed: the instance is released, the
+  200 GiB data disk follows it (set to `Release Disk with Instance`), and there
+  is no copy because the disk has `0` snapshot policies. One missed notice takes
+  the server, the application, `.env` and the logs. Mitigations, in order of
+  effort: enable ECS auto-renewal, set a disk snapshot policy, and reconsider
+  `Release Disk with Instance`. This may also account for the unexplained Cost
+  Insight critical in ECS Insight, which flags subscription instances without
+  auto-renewal.
 - The public IP is **auto-assigned, not an EIP**. Acceptable for DNS because a
   Subscription VPC instance retains its public IP across a stop/start. A later
   conversion to an EIP retains the same address, so DNS is unaffected; the
