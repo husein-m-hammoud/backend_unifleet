@@ -59,8 +59,36 @@ sudo apt install -y php8.3-fpm php8.3-cli php8.3-pgsql php8.3-mbstring \
 # 2. Everything else
 sudo apt install -y nginx git unzip postgresql-client composer
 
-# 3. Service account. Not root, and no login shell - it exists to own files and
-#    run php-fpm, never to be logged into.
+# 3. Mount the 200 GiB data disk at /var/www.
+#
+#    The box has TWO disks: a ~20 GiB system disk and a 200 GiB ESSD data disk
+#    (d-l4vcygds2ltikyftravx). IT delivered the capacity request as a separate
+#    data disk rather than a larger system disk.
+#
+#    An Alibaba data disk arrives RAW - no partition, no filesystem, not
+#    mounted. Until these steps are done the 200 GiB is billed but unusable,
+#    and `df -h` shows only the system disk. The application, its logs and
+#    storage/ all belong here, not on the 20 GiB system disk.
+#
+#    DO THIS BEFORE STEP 4. Mounting over a directory that already has files
+#    HIDES them - clone first and the code vanishes the moment you mount.
+
+lsblk                       # expect vda (system) + vdb (200G, no FSTYPE)
+
+#    Confirm the target is the empty 200 GiB disk and NOT the system disk.
+#    mkfs ERASES it. If FSTYPE is already set, it is formatted - skip mkfs.
+sudo mkfs.ext4 /dev/vdb
+
+sudo mkdir -p /var/www
+#    Mount by UUID, not /dev/vdb: device names can change across a reboot.
+#    nofail so a missing disk cannot block boot into an unreachable box.
+echo "UUID=$(sudo blkid -s UUID -o value /dev/vdb) /var/www ext4 defaults,nofail 0 2" \
+  | sudo tee -a /etc/fstab
+sudo mount -a
+df -h /var/www              # must show ~200G before continuing
+
+# 3b. Service account. Not root, and no login shell - it exists to own files and
+#     run php-fpm, never to be logged into.
 sudo adduser --system --group --home /var/www/unifleet --shell /usr/sbin/nologin unifleet
 sudo mkdir -p /var/www/unifleet/{backend,frontend}
 sudo chown -R unifleet:unifleet /var/www/unifleet
@@ -170,6 +198,10 @@ database — data is written correct from the start, so it would double-shift.
   channel** — it returns 503 on failure, and it lives off the box, which is the
   part that still works when the box is the problem. Set it up; it is currently
   the only thing that would tell anyone.
-- **No automatic disk snapshots** (ECS Insight flags this). Worth enabling once
-  there is data worth losing.
+- **No automatic disk snapshots.** ECS Insight flags this, but the real reason
+  it matters is the data disk's `Release Disk with Instance` setting: if the
+  instance is ever released, the 200 GiB disk goes with it, and `0 Policies`
+  means there is no copy of anything on it. Set a policy once the app is
+  installed. Note this is separate from RDS backups (section B) - RDS covers
+  the database, a disk snapshot covers the app, `.env` and logs.
 - **No CI.** `deploy.sh` is the whole pipeline.

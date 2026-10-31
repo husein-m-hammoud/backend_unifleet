@@ -38,6 +38,21 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | Subscription expiry | 2027-09-30 18:59:59 |
 | RDS instance | Created — endpoint, engine version, PostGIS status TO CONFIRM |
 | Operating system | Ubuntu 22.04 LTS x64 (image `ubuntu_22_04_x64_20G_alibase_20260810.vhd`) |
+| System disk | ~20 GiB (from the image above) |
+| Data disk | `d-l4vcygds2ltikyftravx` — 200 GiB Enterprise SSD (ESSD) PL0, 4200 IOPS, In Use, Subscription to 2027-09-30, **Release Disk with Instance**, no snapshot policy |
+
+Confirmed from the console 2026-10-31. This closes the earlier open question
+about system disk size: the 100–200 GB capacity request was satisfied by UNIMAC
+IT as a **separate 200 GiB data disk**, not by enlarging the 20 GiB system disk.
+No disk needs resizing.
+
+Two consequences carried into `deploy/README.md`:
+- The data disk is **raw** as delivered (no filesystem, not mounted), so the
+  200 GiB is billed but unusable until it is formatted and mounted. It is
+  mounted at `/var/www` in step 3, before any code is cloned.
+- `Release Disk with Instance` plus `0 Policies` means nothing on that disk
+  survives an instance release. A snapshot policy is a real gap, not just a
+  score item.
 
 Notes:
 - The public IP is **auto-assigned, not an EIP**. Acceptable for DNS because a
