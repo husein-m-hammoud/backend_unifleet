@@ -26,7 +26,7 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | Item | Value |
 | --- | --- |
 | ECS instance ID | `i-l4vcygds2ltikyfva6ij` |
-| Instance name | not set |
+| Instance name | `FleetAI` |
 | Instance type | `ecs.hfc6.xlarge` — 4 vCPU / 8 GiB |
 | Public bandwidth | 5 Mbps |
 | Network type | VPC |
