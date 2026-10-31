@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Trust Sanctum token auth on API routes
         $middleware->statefulApi();
 
+        // Apply the 'api' rate limiter (AppServiceProvider) to every /api route.
+        // Keyed per user, not per IP - see the comment on that limiter.
+        $middleware->throttleApi();
+
         // Route guards: manager-only routes + per-page grants for scoped users.
         $middleware->alias([
             'manager' => \App\Http\Middleware\EnsureManager::class,

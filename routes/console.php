@@ -39,6 +39,11 @@ Schedule::call(function () {
 Schedule::command('safee:health')->hourly();
 
 // Keep provider_api_failures bounded (30-day retention).
+// Expiring tokens (config/sanctum.php) leaves the dead rows behind; drop the
+// ones that have been expired for over a day so personal_access_tokens does not
+// grow without bound.
+Schedule::command('sanctum:prune-expired --hours=24')->daily();
+
 Schedule::command('unifleet:doctor --prune')->weeklyOn(1, '04:00')->timezone('Asia/Riyadh');
 
 // Emailed fleet report digests — recipients come from the `report_email_recipients`

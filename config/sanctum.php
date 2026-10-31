@@ -47,7 +47,15 @@ return [
     |
     */
 
-    'expiration' => null,
+    /*
+     | Was null = tokens valid forever, so a token captured from a laptop or a
+     | browser's localStorage stayed a working key indefinitely. 12 hours covers
+     | a full shift without logging an operator out mid-day; the frontend
+     | already handles a 401 by clearing the token and returning to the login
+     | screen, so expiry surfaces as a normal re-login, not an error.
+     | Raise SANCTUM_EXPIRATION_MINUTES if that proves too aggressive in use.
+     */
+    'expiration' => (int) env('SANCTUM_EXPIRATION_MINUTES', 720),
 
     /*
     |--------------------------------------------------------------------------

@@ -17,10 +17,17 @@ use App\Http\Controllers\Api\ZoneController;
 use Illuminate\Support\Facades\Route;
 
 // ─── Public ──────────────────────────────────────────────────────────────────
+// These three are the only unauthenticated write endpoints, so they carry their
+// own tight limits (defined in AppServiceProvider) on top of the group's: login
+// is otherwise an unlimited password oracle, and the password routes each send a
+// real email. 429s here are expected and safe.
 Route::prefix('auth')->group(function () {
-    Route::post('login', [AuthController::class, 'login']);
-    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('login', [AuthController::class, 'login'])
+        ->middleware('throttle:login');
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword'])
+        ->middleware('throttle:password');
+    Route::post('reset-password', [AuthController::class, 'resetPassword'])
+        ->middleware('throttle:password');
 });
 
 // Unauthenticated health check for an external uptime monitor. Terse by design;
