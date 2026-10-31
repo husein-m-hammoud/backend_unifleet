@@ -1,0 +1,24 @@
+# UNIFLEET — scheduler entry. THE single most important line on this server.
+#
+# Install for the service account (not root):
+#   crontab -u <service-account> /var/www/unifleet/backend/deploy/crontab
+# Verify:
+#   crontab -l -u <service-account>
+#
+# This ONE entry drives everything, because Laravel's scheduler dispatches all
+# of it from routes/console.php:
+#   - safee:poll --live-only      every 30s   GPS positions
+#   - safee:poll (full)           every 5min  trips, weights, events
+#   - scheduler heartbeat         every min   proves this cron line is alive
+#   - safee:health                hourly      watchdog + OpsNotifier
+#   - sanctum:prune-expired       daily       drops dead API tokens
+#   - reports:email daily/weekly  06:00       digests
+#   - unifleet:doctor --prune     weekly      failure-log housekeeping
+#
+# Use schedule:run, NEVER schedule:work. schedule:work is the dev-only
+# long-running variant that dies with its terminal - that is exactly how the
+# September 2026 outage started and went unnoticed for 14 days.
+#
+# Without this line nothing polls AND nothing watches, so there is no data and
+# no warning that there is no data.
+* * * * * cd /var/www/unifleet/backend && php artisan schedule:run >> /dev/null 2>&1

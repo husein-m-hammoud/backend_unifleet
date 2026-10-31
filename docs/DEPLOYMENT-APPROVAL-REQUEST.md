@@ -2,7 +2,7 @@
 
 **To:** UNIMAC IT
 **From:** Hussein Hammoud, Cedars Technology
-**Date:** 2026-10-29
+**Date:** 2026-10-29 (revised 2026-10-31)
 **Target server:** ECS `i-l4vcygds2ltikyfva6ij` (`8.213.39.81`), VPC `192.168.0.197`,
 Ubuntu 22.04, Saudi Arabia (Riyadh)
 **Purpose:** list every change required to bring the UNIFLEET platform live, so
@@ -43,18 +43,43 @@ Redis, FTP, or any control-panel port.
 
 ## D. Software installed on the server
 
-Standard distribution packages from the OS and vendor repositories only. No
-third-party agents, no control panels.
+Distribution packages from the OS and vendor repositories, with **one
+third-party repository**, disclosed and justified at D2 below. No third-party
+agents, no control panels.
 
 | # | Package | Purpose |
 | --- | --- | --- |
 | D1 | Nginx | Web server / TLS termination |
-| D2 | PHP 8.2+ and FPM, with the `pgsql`, `mbstring`, `xml`, `curl`, `zip`, `bcmath`, `gd` extensions | Application runtime |
+| D2 | **PHP 8.3** and FPM, with the `pgsql`, `mbstring`, `xml`, `curl`, `zip`, `bcmath`, `intl` extensions — **from the `ppa:ondrej/php` repository** | Application runtime. See the note below. |
 | D3 | Composer | PHP dependency install (`--no-dev --optimize-autoloader`) |
-| D4 | Node.js 20 | Builds the frontend assets; **build-time only, not a running service** |
-| D5 | Git | Deploying application code |
-| D6 | Certbot | Only if IT chooses Let's Encrypt for C2 |
-| D7 | PostgreSQL client tools | Migrations and diagnostics |
+| D4 | Git | Deploying application code |
+| D5 | Certbot | Only if IT chooses Let's Encrypt for C2 |
+| D6 | PostgreSQL client tools | Migrations and diagnostics |
+
+**D2 — why a third-party repository is required.** The application runs on
+Laravel 13, which hard-requires PHP 8.3 or newer; Ubuntu 22.04 ships PHP 8.1 and
+will never carry 8.3 in its own repositories. There are exactly two ways to meet
+that requirement, and we are asking IT to approve the first:
+
+1. **Install PHP 8.3 from `ppa:ondrej/php`** (requested). This is the standard
+   source for current PHP on Ubuntu, maintained by the Debian PHP packaging
+   maintainer, and is what the large majority of Ubuntu PHP deployments use. It
+   supplies PHP packages only — no agents, no services, no kernel modules.
+2. **Rebuild the instance on Ubuntu 24.04**, which carries PHP 8.3 in its main
+   repository. Technically cleaner, but it means replacing the system disk of an
+   instance IT has already provisioned, and it is not necessary to run the
+   software.
+
+We considered option 2 and chose option 1 as the lower-risk change. If IT would
+rather avoid any third-party repository, option 2 is available and we are happy
+to take that route instead — the decision is IT's, and the application is
+identical either way.
+
+**Node.js is no longer requested.** An earlier draft of this document listed it
+for building the frontend. The frontend is now built on a developer workstation
+and only the resulting static files are copied to the server, so the server
+needs no JavaScript toolchain at all. This removes a package from the approved
+set rather than adding one.
 
 Application code lives under `/var/www/unifleet`, owned by a dedicated
 non-root service account. No changes are made outside that directory, the Nginx

@@ -1,0 +1,175 @@
+# UNIFLEET — deployment
+
+Everything needed to stand the platform up on the UNIMAC ECS box, and to deploy
+to it afterwards. Replaces the hand-typed checklist that used to live in the
+project-root `TODO.md`.
+
+**Target:** ECS `8.213.39.81`, Ubuntu 22.04, Saudi Arabia (Riyadh).
+**Decided 2026-10-31:** stay on **22.04** and install **PHP 8.3 from the
+`ondrej/php` PPA**. Laravel 13.4 hard-requires PHP `^8.3` and 22.04 ships 8.1,
+so a newer PHP is mandatory; the OS version is not. Rebuilding to 24.04 (which
+carries 8.3 in `main`) was considered and rejected as not worth an instance
+rebuild and a lockout risk. The PPA is disclosed in
+`docs/DEPLOYMENT-APPROVAL-REQUEST.md` section D.
+
+## Files
+
+| File | Runs where | Purpose |
+| --- | --- | --- |
+| `nginx/unifleet.conf` | server | Site config. SPA + API on one origin. |
+| `php/unifleet-pool.conf` | server | PHP-FPM pool. Sets the user that must match the deploy account. |
+| `crontab` | server | The scheduler line. Nothing polls without it. |
+| `deploy.sh` | server | Routine backend deploy. Idempotent. |
+| `push-frontend.sh` | workstation | Builds the SPA locally, rsyncs the output. |
+
+The server has **no Node toolchain** by design — it is build-time-only software,
+so it stays off an internet-facing box and out of the IT change set.
+
+## Needs IT approval first
+
+Per `docs/SERVER-OPS-LOG.md`, these are not ours to do unilaterally. Log each
+one in section 5 when it happens.
+
+1. Inbound 80 and 443 from `0.0.0.0/0`; **22 from named admin IPs only**.
+2. **Close the world-open high-risk ports that already exist.** ECS Insight
+   flags a security group allowing `0.0.0.0/0` to ports in the 22 / 3389 / 5432
+   / 3306 / 6379 set. Combined with root SSH login this is the live risk on the
+   box today, ahead of anything in this directory. Reducing exposure, but still
+   a firewall change — tell IT and log it.
+3. RDS: reachable from `192.168.0.197` only, an app database and app user (not
+   master), `CREATE EXTENSION postgis;`, backups on, **one test restore**.
+4. DNS `fleet.unimaccompany.com` → `8.213.39.81`, then the certificate.
+
+Until (4), the site is HTTP-only on the bare IP. That is a recorded, accepted
+risk with conditions attached — see `SERVER-OPS-LOG.md` section 4.1. The most
+important condition: **do not create UNIMAC end-user accounts until TLS is
+live**, and rotate anything typed over HTTP.
+
+## First install
+
+```bash
+# 1. PHP 8.3 (22.04 ships 8.1)
+sudo add-apt-repository -y ppa:ondrej/php
+sudo apt update
+sudo apt install -y php8.3-fpm php8.3-cli php8.3-pgsql php8.3-mbstring \
+                    php8.3-xml php8.3-curl php8.3-zip php8.3-bcmath php8.3-intl
+# pgsql is the database driver; mbstring/xml/curl/zip are required by the
+# dependency tree; bcmath/intl are used by the analytics and report formatting.
+
+# 2. Everything else
+sudo apt install -y nginx git unzip postgresql-client composer
+
+# 3. Service account. Not root, and no login shell - it exists to own files and
+#    run php-fpm, never to be logged into.
+sudo adduser --system --group --home /var/www/unifleet --shell /usr/sbin/nologin unifleet
+sudo mkdir -p /var/www/unifleet/{backend,frontend}
+sudo chown -R unifleet:unifleet /var/www/unifleet
+
+# 4. Code. Both repos are PRIVATE, so give the box a read-only deploy key per
+#    repo (GitHub > repo > Settings > Deploy keys). Never put a personal token
+#    or personal SSH key on a shared server.
+sudo -u unifleet git clone git@github.com:husein-m-hammoud/backend_unifleet.git /var/www/unifleet/backend
+
+# 5. Config
+cd /var/www/unifleet/backend
+sudo -u unifleet cp .env.example .env
+sudo -u unifleet php artisan key:generate
+sudo -u unifleet nano .env
+```
+
+`.env` must have, at minimum:
+
+```
+APP_ENV=production
+APP_DEBUG=false          # doctor FAILS on debug in prod: it leaks stack traces and env values
+APP_URL=http://8.213.39.81
+FRONTEND_URL=http://8.213.39.81
+DB_CONNECTION=pgsql      # host/port/database/username/password from RDS
+ADMIN_PASSWORD=          # leave EMPTY - the seeder generates one and prints it once
+ADMIN_EMAIL=             # needed for password resets to reach you
+LOG_STACK=daily
+LOG_DAILY_DAYS=14
+```
+
+Leave `DB_TIMEZONE` alone — the pgsql connection must stay UTC.
+
+```bash
+# 6. Schema + first account. The seeder prints a generated owner password ONCE;
+#    store it in a password manager before you close the terminal.
+sudo -u unifleet php artisan migrate --force
+sudo -u unifleet php artisan db:seed --force
+sudo -u unifleet php artisan storage:link
+
+# 7. Services
+sudo cp deploy/php/unifleet-pool.conf /etc/php/8.3/fpm/pool.d/unifleet.conf
+sudo rm -f /etc/php/8.3/fpm/pool.d/www.conf
+sudo systemctl restart php8.3-fpm
+
+sudo cp deploy/nginx/unifleet.conf /etc/nginx/sites-available/unifleet
+sudo ln -sf /etc/nginx/sites-available/unifleet /etc/nginx/sites-enabled/unifleet
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+
+# 8. THE SCHEDULER. Without this one line nothing polls and nothing watches.
+sudo crontab -u unifleet /var/www/unifleet/backend/deploy/crontab
+
+# 9. Caches (last, so they capture the finished .env)
+sudo -u unifleet php artisan config:cache route:cache view:cache event:cache
+
+# 10. deploy.sh reloads php-fpm, so allow just that one command
+echo 'unifleet ALL=(root) NOPASSWD: /bin/systemctl reload php8.3-fpm' \
+  | sudo tee /etc/sudoers.d/unifleet-deploy
+sudo chmod 440 /etc/sudoers.d/unifleet-deploy
+```
+
+Then, from your workstation:
+
+```bash
+cd ~/Desktop/my-project/unifleet/backend && ./deploy/push-frontend.sh
+```
+
+## Routine deploys
+
+```bash
+# backend, on the server
+cd /var/www/unifleet/backend && ./deploy/deploy.sh
+
+# frontend, from your workstation
+./deploy/push-frontend.sh
+```
+
+`deploy.sh` puts the app in maintenance mode while it migrates. **Every route
+returns 503 during that window, including `/api/health`, so the uptime monitor
+will alert.** Expected during a deploy, not an incident.
+
+## Verification
+
+```bash
+sudo -u unifleet php artisan unifleet:doctor     # exits non-zero on any failure
+curl -i http://8.213.39.81/api/health            # from OFF the box: expect 200
+```
+
+- Log in, then open `/dashboard/system` as the owner and confirm Overview green.
+- The `Scheduler` check must read `<1 min ago`. If it does not, step 8 is wrong.
+- Expect two standing warnings until SMTP exists: `Mail: log` and
+  `Ops alerting: none`. See below.
+
+Optional on a first deploy: `DELETE FROM vehicle_positions WHERE lat = 0;`
+(legacy junk). **Do not** run the historical timezone correction on a fresh
+database — data is written correct from the start, so it would double-shift.
+
+## Still open
+
+- **No queue worker is needed.** Verified: nothing dispatches a job and no class
+  in `app/Notifications/` implements `ShouldQueue`, so notifications send
+  synchronously. Earlier checklists called for a supervisor unit; they were
+  wrong. Revisit only if something starts queueing.
+- **No ops alert channel.** `MAIL_MAILER=log`, so a dead pipeline is detected and
+  logged but reaches nobody. DirectMail needs the domain first for SPF/DKIM, so
+  until then **the external uptime monitor on `/api/health` IS the alert
+  channel** — it returns 503 on failure, and it lives off the box, which is the
+  part that still works when the box is the problem. Set it up; it is currently
+  the only thing that would tell anyone.
+- **No automatic disk snapshots** (ECS Insight flags this). Worth enabling once
+  there is data worth losing.
+- **No CI.** `deploy.sh` is the whole pipeline.
