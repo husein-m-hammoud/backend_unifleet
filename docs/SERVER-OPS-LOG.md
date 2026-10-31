@@ -36,7 +36,12 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | Billing method | Subscription |
 | Region | Saudi Arabia (Riyadh) `me-central-1` — confirmed |
 | Subscription expiry | 2027-09-30 18:59:59 |
-| RDS instance | Created — endpoint, engine version, PostGIS status TO CONFIRM |
+| RDS instance | `pgm-l4v1rlvsu471844x` — name `FleetAI`, **PostgreSQL 18.0**, Regular Instance, Running |
+| RDS network | VPC `vpc-l4vo9dyye94qqyua8m0zx`, Riyadh Zone A |
+| RDS billing | Subscription with auto-renewal, created 2026-09-30, expires 2027-09-30 |
+| RDS internal endpoint | TO CONFIRM |
+| RDS whitelist | TO CONFIRM — must allow only `192.168.0.197` |
+| RDS backups | TO CONFIRM — automatic backups + one test restore |
 | Operating system | Ubuntu 22.04 LTS x64 (image `ubuntu_22_04_x64_20G_alibase_20260810.vhd`) |
 | System disk | ~20 GiB (from the image above) |
 | Data disk | `d-l4vcygds2ltikyftravx` — 200 GiB Enterprise SSD (ESSD) PL0, 4200 IOPS, In Use, Subscription to 2027-09-30, **Release Disk with Instance**, no snapshot policy |
@@ -55,6 +60,17 @@ Two consequences carried into `deploy/README.md`:
   score item.
 
 Notes:
+- **PostGIS is not required.** Verified against the schema 2026-10-31: no
+  `geometry`/`geography` column in any of the 51 migrations, no `CREATE
+  EXTENSION`, no PostGIS function call in the codebase. Coordinates are plain
+  `double precision` and zones carry no boundary geometry. The platform runs on
+  stock PostgreSQL with no extensions, which also closes the long-standing
+  "TimescaleDB vs PostGIS" question — neither is needed. Section B of the
+  approval request has been corrected accordingly.
+- **ECS VPC ID still needs confirming against the RDS VPC.** RDS sits in
+  `vpc-l4vo9dyye94qqyua8m0zx`. If the ECS is in a different VPC the two cannot
+  reach each other at all, regardless of whitelist. Same zone (Riyadh A) is a
+  good sign but is not the same thing as the same VPC.
 - The public IP is **auto-assigned, not an EIP**. Acceptable for DNS because a
   Subscription VPC instance retains its public IP across a stop/start. A later
   conversion to an EIP retains the same address, so DNS is unaffected; the

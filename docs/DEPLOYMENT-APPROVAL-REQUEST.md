@@ -29,9 +29,22 @@ Redis, FTP, or any control-panel port.
 | --- | --- | --- |
 | B1 | RDS whitelist / security group to allow only the ECS private IP `192.168.0.197` | Database reachable from the application server only, never the internet |
 | B2 | Create one application database and one application DB user (not the master user) | Least privilege |
-| B3 | `CREATE EXTENSION postgis;` | Required — the platform stores vehicle positions, geofences and zones as geometry |
-| B4 | Confirm automatic backups are enabled, then **perform one test restore** | An untested backup is not a backup |
-| B5 | Run schema migrations (`php artisan migrate --force`) and seed reference settings | Creates the application tables |
+| B3 | Confirm automatic backups are enabled, then **perform one test restore** | An untested backup is not a backup |
+| B4 | Run schema migrations (`php artisan migrate --force`) and seed reference settings | Creates the application tables |
+
+**Correction: PostGIS is NOT required, and is no longer requested.** An earlier
+draft of this document asked IT to run `CREATE EXTENSION postgis;` and described
+it as required because "the platform stores vehicle positions, geofences and
+zones as geometry". That was verified against the schema on 2026-10-31 and is
+**incorrect**. The application uses no PostGIS whatsoever: there is no
+`geometry` or `geography` column in any of the 51 migrations, no `CREATE
+EXTENSION` statement, and no PostGIS function call anywhere in the codebase.
+Coordinates are stored as ordinary `double precision` columns and zones are
+logical groupings with no boundary geometry.
+
+The platform therefore runs on **stock PostgreSQL with no extensions**. This
+removes a request rather than adding one, and removes a dependency that could
+have constrained the PostgreSQL version.
 
 ## C. DNS and TLS
 
