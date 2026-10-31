@@ -6,7 +6,7 @@
 **Document purpose:** audit and compliance record of every change made to
 UNIMAC-managed infrastructure (Alibaba Cloud ECS / RDS), and the approval trail
 for each one.
-**Last updated:** 2026-10-29
+**Last updated:** 2026-10-31
 
 ---
 
@@ -90,6 +90,34 @@ still requires explicit approval before it is enabled.
 
 Intentionally **not** requested: no public database port, no public Redis, no
 FTP, no control-panel ports.
+
+### 4.1 Interim HTTP-only phase — risk accepted by the owner of record
+
+**Decision (2026-10-31, Hussein Hammoud):** the platform will be brought up on
+the bare public IP `8.213.39.81` with ports 80 and 443 open to `0.0.0.0/0`,
+before `fleet.unimaccompany.com` resolves and before a TLS certificate exists.
+
+**Why this is a risk, recorded explicitly:** a publicly trusted certificate
+cannot be issued for an IP address (Let's Encrypt will not issue for one), so
+during this phase the dashboard is served over **plaintext HTTP**. Login
+passwords and API bearer tokens therefore cross the public internet
+unencrypted and are readable by anyone on the network path. No application-level
+control can compensate for this; the rate limiting, token expiry and account
+hardening added on 2026-10-31 all assume the transport is private.
+
+**Conditions attached to the acceptance:**
+
+1. **No UNIMAC end-user accounts are created during this phase.** Only the
+   developer's own account exists, and its password is treated as disposable.
+2. **Any credential typed into the site over HTTP is considered compromised**
+   and is rotated once TLS is live — including the seeded owner password.
+3. The phase ends as soon as DNS (C1) and the certificate (C2) are in place;
+   HTTP is then reduced to a 301 redirect and ACME validation only.
+4. **HSTS is not enabled until TLS is live**, as it would otherwise make the
+   interim HTTP service unreachable from browsers that had seen the header.
+
+This entry exists so the interim exposure is a recorded, time-boxed decision
+with an owner, rather than an undocumented default.
 
 ## 5. Change log
 
