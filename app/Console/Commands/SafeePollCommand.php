@@ -573,11 +573,33 @@ class SafeePollCommand extends Command
 
         $activeVehicles = Vehicle::active()->where('provider', $this->provider)->get();
 
+        // Read once, not per vehicle. See config/services.php 'safee.poll' for
+        // why fuel and weight are off: the provider answers both with
+        // result:null for every vehicle, so calling them per vehicle spent half
+        // the poll's HTTP budget retrieving nothing.
+        $pollFuel   = (bool) config('services.safee.poll.fuel', false);
+        $pollWeight = (bool) config('services.safee.poll.weight', false);
+
+        if (! $pollFuel || ! $pollWeight) {
+            $skipped = array_keys(array_filter(['fuel' => ! $pollFuel, 'weight' => ! $pollWeight]));
+            // Stated every run on purpose. A disabled integration that reports
+            // nothing is one nobody remembers to re-enable.
+            $this->line('  Skipping telemetry: ' . implode(', ', $skipped)
+                . ' (provider returns no data; SAFEE_POLL_FUEL / SAFEE_POLL_WEIGHT to re-enable)');
+        }
+
         foreach ($activeVehicles as $vehicle) {
             $this->syncVehicleTrips($vehicle, $startDate, $endDate);
-            $this->syncVehicleFuel($vehicle);
+
+            if ($pollFuel) {
+                $this->syncVehicleFuel($vehicle);
+            }
+
             $this->syncVehicleSpeed($vehicle);
-            $this->syncVehicleWeight($vehicle);
+
+            if ($pollWeight) {
+                $this->syncVehicleWeight($vehicle);
+            }
         }
     }
 

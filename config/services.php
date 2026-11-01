@@ -43,7 +43,34 @@ return [
     | SAFEE_<NAME>_* env vars — the poller and services pick it up automatically.
     */
     'safee' => [
-        'default'   => env('SAFEE_DEFAULT_PROVIDER', 'alrakeen'),
+        'default'   => env('SAFEE_DEFAULT_PROVIDER', 'dsco'),
+
+        /*
+         * Per-vehicle telemetry endpoints the full poll should call.
+         *
+         * BOTH DISABLED 2026-11-01. Verified live against DSCO: get-fuel-data
+         * and get-weight-data both answer HTTP 200 with
+         * {"status":"success","result":null} for every vehicle, while
+         * get-speed-data returns real data for the same vehicle in the same
+         * second. The devices are Teltonika units, which only report fuel with
+         * a fuel-level sensor or CAN adapter fitted - so the data does not
+         * exist upstream rather than being lost in transit.
+         *
+         * Leaving them on cost ~125,000 HTTP requests a day that always return
+         * nothing: the full poll runs every 5 minutes over 218 active vehicles,
+         * and these were 2 of the 4 calls per vehicle. Half the poller's API
+         * traffic, in one sequential PHP process that has previously exhausted
+         * its memory limit before writing trips.
+         *
+         * Re-enable per endpoint by setting SAFEE_POLL_FUEL=true /
+         * SAFEE_POLL_WEIGHT=true once the provider confirms sensors are fitted.
+         * Nothing else needs changing - the write path, columns and the
+         * low-fuel alert rule are all still in place and untouched.
+         */
+        'poll'      => [
+            'fuel'   => env('SAFEE_POLL_FUEL', false),
+            'weight' => env('SAFEE_POLL_WEIGHT', false),
+        ],
         'providers' => [
             // Alrakeen — PAUSED 2026-10-29 (no longer working with them for now).
             // Credentials stay in .env; uncomment this block to resume polling.
