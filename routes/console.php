@@ -18,7 +18,20 @@ Artisan::command('inspire', function () {
 //
 // Both poll all configured providers (Alrakeen + DSCO).
 Schedule::command('safee:poll --live-only')->everyThirtySeconds()->withoutOverlapping();
-Schedule::command('safee:poll')->everyFiveMinutes()->withoutOverlapping();
+// Every 15 minutes, NOT 5. Measured 2026-11-01: a full poll over 218 active
+// vehicles takes 6m18s, because steps 1-7 include two sequential API calls per
+// vehicle (trips + speed). On a 5-minute schedule the job could never finish
+// before the next tick was due, so withoutOverlapping() silently dropped most
+// runs - the poll looked scheduled four times more often than it actually ran.
+// 15 minutes gives a ~6-minute job room to finish, idle, and start clean.
+//
+// Nothing a user sees is affected. Live positions - the only data that needs to
+// be fresh - come from the --live-only poll above, every 30 seconds. What this
+// job fetches (sites, categories, geofences, drivers, vehicle records, trips,
+// speed summaries) does not change minute to minute. The trackers themselves
+// only emit a new fix about every 10 minutes (median), so even the 30s live
+// poll already asks far faster than the devices answer.
+Schedule::command('safee:poll')->everyFifteenMinutes()->withoutOverlapping();
 
 // Scheduler heartbeat — stamps "the scheduler ticked" once a minute. This is
 // how `unifleet:doctor` and the System page can tell "the poller found nothing"
