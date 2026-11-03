@@ -166,6 +166,6 @@ with an owner, rather than an undocumented default.
 
 | Date | Change | Requested by | Approved by | Rollback |
 | --- | --- | --- | --- | --- |
-| — | No server changes to date | — | — | — |
+| 2026-11-03 | DNS A record `fleet.unimaccompany.com` -> `8.213.39.81` created | Cedars Technology (Hussein Hammoud) | UNIMAC IT | Delete the A record. Verified from outside: `dig +short fleet.unimaccompany.com` returns `8.213.39.81`. |
 
 <!-- Append new rows above this line. Newest last. One row per change. -->

@@ -50,7 +50,7 @@ have constrained the PostgreSQL version.
 
 | # | Change | Purpose |
 | --- | --- | --- |
-| C1 | A record `fleet.unimaccompany.com` → `8.213.39.81` | **IT action** — UNIMAC controls the domain |
+| C1 | ~~A record `fleet.unimaccompany.com` → `8.213.39.81`~~ — **COMPLETED 2026-11-03 by UNIMAC IT.** Verified by external DNS lookup. No further action. | IT action — UNIMAC controls the domain |
 | C2 | TLS certificate for `fleet.unimaccompany.com` | Installed on this server either way. Option 1: we issue free Let's Encrypt on the box, auto-renewing (needs C1 live and A2 open) — no IT action. Option 2: IT supplies a certificate and private key and we install it, with IT tracking renewal. IT's choice. |
 | C3 | Force HTTPS; HTTP serves only the redirect | No application traffic in clear text |
 
