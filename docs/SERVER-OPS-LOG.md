@@ -172,4 +172,6 @@ with an owner, rather than an undocumented default.
 | 2026-11-05 | Instance restarted to apply the key pair binding | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | None required - no data on the instance at the time. |
 | 2026-11-05 | Root OS password reset via the ECS console, to apply key injection after the binding alone did not take effect | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Reset again from the console. NOTE: this may re-enable SSH password authentication; `sshd -T` is being checked and `PasswordAuthentication no` restored if so. Port 22 remains open to 0.0.0.0/0 at the time of writing. |
 
+| 2026-11-06 | **SSH hardened to keys-only.** Set `PasswordAuthentication no`, `PermitRootLogin prohibit-password`, `KbdInteractiveAuthentication no` in `/etc/ssh/sshd_config`; validated with `sshd -t` and reloaded. Effective values confirmed via `sshd -T`. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Restore `/etc/ssh/sshd_config.bak.2026-11-06` and `systemctl reload ssh`. The Alibaba browser console is not SSH and still accepts the OS root password, so console access is unaffected either way. |
+
 <!-- Append new rows above this line. Newest last. One row per change. -->
