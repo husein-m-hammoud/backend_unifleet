@@ -47,7 +47,7 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | RDS backups | TO CONFIRM — automatic backups + one test restore |
 | Operating system | Ubuntu 22.04 LTS x64 (image `ubuntu_22_04_x64_20G_alibase_20260810.vhd`) |
 | System disk | **50 GiB** (`vda3`, ext4, mounted `/`) — confirmed on the box 2026-11-05. The image name says `20G`, which is the image size, not the provisioned disk. |
-| Data disk | `d-l4vcygds2ltikyftravx` — 200 GiB Enterprise SSD (ESSD) PL0, 4200 IOPS, In Use, Subscription to 2027-09-30, **Release Disk with Instance**, no snapshot policy |
+| Data disk | `d-l4vcygds2ltikyftravx` — 200 GiB Enterprise SSD (ESSD) PL0, 4200 IOPS, In Use, Subscription to 2027-09-30, **Release Disk with Instance**, no snapshot policy. Formatted ext4 2026-11-06, label `unifleet-data`, UUID `d641b322-6d6f-46a8-88e8-d0c7f8510622`, mounted `/var/www`. **Oversized for the workload** (app uses ~10 GB; the database is on RDS, not here) but `Detachable: No` so it cannot be removed or refunded before the 2027-09-30 renewal — right-size it then. |
 
 Confirmed from the console 2026-10-31. This closes the earlier open question
 about system disk size: the 100–200 GB capacity request was satisfied by UNIMAC
@@ -173,5 +173,7 @@ with an owner, rather than an undocumented default.
 | 2026-11-05 | Root OS password reset via the ECS console, to apply key injection after the binding alone did not take effect | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Reset again from the console. NOTE: this may re-enable SSH password authentication; `sshd -T` is being checked and `PasswordAuthentication no` restored if so. Port 22 remains open to 0.0.0.0/0 at the time of writing. |
 
 | 2026-11-06 | **SSH hardened to keys-only.** Set `PasswordAuthentication no`, `PermitRootLogin prohibit-password`, `KbdInteractiveAuthentication no` in `/etc/ssh/sshd_config`; validated with `sshd -t` and reloaded. Effective values confirmed via `sshd -T`. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Restore `/etc/ssh/sshd_config.bak.2026-11-06` and `systemctl reload ssh`. The Alibaba browser console is not SSH and still accepts the OS root password, so console access is unaffected either way. |
+
+| 2026-11-06 | Formatted the 200 GiB data disk `/dev/vdb` as ext4 (label `unifleet-data`, **UUID `d641b322-6d6f-46a8-88e8-d0c7f8510622`**) and mounted it at `/var/www` via `/etc/fstab` with `nofail`. Verified: 196G, 186G available. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Remove the `/etc/fstab` line and `umount /var/www`. The disk was raw and empty before this - no data existed to lose, and the format was guarded to abort if any filesystem signature was present. |
 
 <!-- Append new rows above this line. Newest last. One row per change. -->
