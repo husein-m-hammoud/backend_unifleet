@@ -109,6 +109,40 @@ class SystemHealthService
                 return $this->check('app_env', 'Environment', self::OK, "{$env} / debug off");
             }),
 
+            $this->guard('frontend_url', function () {
+                $url = (string) config('app.frontend_url');
+
+                /*
+                 * Every link we email is built from this value: the "Sign in"
+                 * button on a new account, and the password-reset link. The
+                 * config default is a localhost URL, and .env.example ships
+                 * that default - so a production .env copied from the example
+                 * sends users links pointing at their own machine.
+                 *
+                 * It fails silently in the worst way: the email sends, looks
+                 * correct, and the recipient simply cannot sign in. Hence a
+                 * hard FAIL in production rather than a warning.
+                 */
+                $isLocal = $url === ''
+                    || (bool) preg_match('#^https?://(localhost|127\\.0\\.0\\.1|\\[?::1\\]?)(:\\d+)?#i', $url);
+
+                if (config('app.env') === 'production' && $isLocal) {
+                    return $this->check('frontend_url', 'Frontend URL', self::FAIL,
+                        $url === '' ? 'not set' : $url,
+                        'Account-setup and password-reset emails build their links from FRONTEND_URL. '
+                        . 'Pointing at localhost in production emails users a link to their own machine. '
+                        . 'Set FRONTEND_URL to the real site address.');
+                }
+
+                if ($isLocal) {
+                    return $this->check('frontend_url', 'Frontend URL', self::WARN,
+                        $url === '' ? 'not set' : $url,
+                        'Fine for local work; must be the real address before anyone is emailed a login link.');
+                }
+
+                return $this->check('frontend_url', 'Frontend URL', self::OK, $url);
+            }),
+
             $this->guard('php', fn () => $this->check(
                 'php', 'PHP', self::OK, PHP_VERSION,
                 'Laravel ' . app()->version(),

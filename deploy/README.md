@@ -110,8 +110,8 @@ sudo -u unifleet nano .env
 ```
 APP_ENV=production
 APP_DEBUG=false          # doctor FAILS on debug in prod: it leaks stack traces and env values
-APP_URL=http://8.213.39.81
-FRONTEND_URL=http://8.213.39.81
+APP_URL=http://fleet.unimaccompany.com
+FRONTEND_URL=http://fleet.unimaccompany.com   # https:// once the cert is in
 DB_CONNECTION=pgsql      # host/port/database/username/password from RDS
 ADMIN_PASSWORD=          # leave EMPTY - the seeder generates one and prints it once
 ADMIN_EMAIL=             # needed for password resets to reach you
@@ -120,6 +120,19 @@ LOG_DAILY_DAYS=14
 ```
 
 Leave `DB_TIMEZONE` alone — the pgsql connection must stay UTC.
+
+**`FRONTEND_URL` is not cosmetic.** The new-account email's "Sign in" button and
+every password-reset link are built from it. Left at the `.env.example`
+localhost value, users are emailed links to their own machine — the mail sends,
+looks right, and they cannot log in. `unifleet:doctor` fails on this in
+production (`Frontend URL` check) rather than letting it through quietly.
+
+**Do not create user accounts until mail works.** `MAIL_MAILER=log` writes
+emails to `storage/logs/laravel.log` and sends nothing, and
+`UserController::tryNotify()` swallows transport errors — so creating a user
+reports success while the person receives no credentials at all. DNS is now
+live, so Alibaba DirectMail is finally possible: it needs SPF/DKIM/DMARC on
+`unimaccompany.com`, which is a DNS request to UNIMAC IT.
 
 ```bash
 # 6. Schema + first account. The seeder prints a generated owner password ONCE;
