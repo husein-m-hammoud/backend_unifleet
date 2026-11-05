@@ -168,4 +168,8 @@ with an owner, rather than an undocumented default.
 | --- | --- | --- | --- | --- |
 | 2026-11-03 | DNS A record `fleet.unimaccompany.com` -> `8.213.39.81` created | Cedars Technology (Hussein Hammoud) | UNIMAC IT | Delete the A record. Verified from outside: `dig +short fleet.unimaccompany.com` returns `8.213.39.81`. |
 
+| 2026-11-05 | Imported existing SSH public key as ECS key pair `hussein-mac` (ed25519, fingerprint `SHA256:O+cXkp+Zsgu431dPiXGvTlqhdWF3K1/j1X8LQrqb4KA`) and bound it to instance `i-l4vcygds2ltikyfva6ij` | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Unbind the key pair in the ECS console. Public key imported rather than auto-generated, so no private key was ever downloaded or stored by Alibaba. |
+| 2026-11-05 | Instance restarted to apply the key pair binding | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | None required - no data on the instance at the time. |
+| 2026-11-05 | Root OS password reset via the ECS console, to apply key injection after the binding alone did not take effect | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Reset again from the console. NOTE: this may re-enable SSH password authentication; `sshd -T` is being checked and `PasswordAuthentication no` restored if so. Port 22 remains open to 0.0.0.0/0 at the time of writing. |
+
 <!-- Append new rows above this line. Newest last. One row per change. -->
