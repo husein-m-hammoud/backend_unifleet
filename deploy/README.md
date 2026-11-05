@@ -61,7 +61,9 @@ sudo apt install -y nginx git unzip postgresql-client composer
 
 # 3. Mount the 200 GiB data disk at /var/www.
 #
-#    The box has TWO disks: a ~20 GiB system disk and a 200 GiB ESSD data disk
+#    The box has TWO disks: a 50 GiB system disk (vda3, ext4, mounted /) and a
+#    200 GiB ESSD data disk (vdb). Confirmed on the box 2026-11-05 - the image
+#    name says 20G, which is the image size, not the provisioned disk.
 #    (d-l4vcygds2ltikyftravx). IT delivered the capacity request as a separate
 #    data disk rather than a larger system disk.
 #
@@ -73,7 +75,7 @@ sudo apt install -y nginx git unzip postgresql-client composer
 #    DO THIS BEFORE STEP 4. Mounting over a directory that already has files
 #    HIDES them - clone first and the code vanishes the moment you mount.
 
-lsblk                       # expect vda (system) + vdb (200G, no FSTYPE)
+lsblk                       # confirmed 2026-11-05: vdb is 200G with NO FSTYPE (raw)
 
 #    Confirm the target is the empty 200 GiB disk and NOT the system disk.
 #    mkfs ERASES it. If FSTYPE is already set, it is formatted - skip mkfs.

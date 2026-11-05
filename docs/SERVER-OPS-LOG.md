@@ -46,7 +46,7 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | RDS whitelist | TO CONFIRM — must allow only `192.168.0.197` |
 | RDS backups | TO CONFIRM — automatic backups + one test restore |
 | Operating system | Ubuntu 22.04 LTS x64 (image `ubuntu_22_04_x64_20G_alibase_20260810.vhd`) |
-| System disk | ~20 GiB (from the image above) |
+| System disk | **50 GiB** (`vda3`, ext4, mounted `/`) — confirmed on the box 2026-11-05. The image name says `20G`, which is the image size, not the provisioned disk. |
 | Data disk | `d-l4vcygds2ltikyftravx` — 200 GiB Enterprise SSD (ESSD) PL0, 4200 IOPS, In Use, Subscription to 2027-09-30, **Release Disk with Instance**, no snapshot policy |
 
 Confirmed from the console 2026-10-31. This closes the earlier open question
