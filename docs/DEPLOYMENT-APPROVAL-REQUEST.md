@@ -103,25 +103,45 @@ and PHP configuration, and the single crontab entry in E1.
 | # | Change | Purpose |
 | --- | --- | --- |
 | E1 | One crontab entry, running once per minute as the service account: `php artisan schedule:run` | Drives the GPS poller, the health watchdog and log pruning. **The platform collects no data without this line.** |
-| E2 | A queue worker under systemd, if required | Prevents background jobs queueing silently |
+
+**Withdrawn: E2, a queue worker.** An earlier draft requested a systemd queue
+worker. Verified against the code: nothing in the application dispatches a
+queued job and no notification is queued, so every email and alert is sent
+synchronously. No worker process is needed, and none will be installed.
 
 ## F. Outbound connections required
 
 The server initiates these; none of them require an inbound port.
 
-| # | Destination | Purpose |
-| --- | --- | --- |
-| F1 | `https://tk.alrakeen.sa` | Alrakeen GPS provider API |
-| F2 | `https://fms.dimensions-systems.com` | DSCO GPS provider API |
-| F3 | Mail service (Alibaba DirectMail or equivalent), port 465/587 | Account-setup and password-reset emails, plus operational alerts |
-| F4 | Twilio API | SMS alerts |
-| F5 | OS and vendor package repositories | Security updates |
+Revised 2026-11-05, and now **shorter than first requested**. IT asked that
+these be "as specific as possible to minimise DMZ", so each entry below is the
+exact host, and anything not currently in use has been removed rather than
+reserved.
+
+| # | Destination | Port | Purpose |
+| --- | --- | --- | --- |
+| F1 | `fms.dimensions-systems.com` | 443 | GPS provider API — the only active provider |
+| F2 | `unimaccompany-com.mail.protection.outlook.com` | 25 | Outbound email via UNIMAC's own Microsoft 365 (see section H) |
+| F3 | `github.com` | 443 | Deploying application code |
+| F4 | `archive.ubuntu.com`, `security.ubuntu.com`, `ppa.launchpadcontent.net`, `keyserver.ubuntu.com` | 80/443 | OS and PHP security updates |
+
+**Removed from the original request:**
+
+- `tk.alrakeen.sa` — the Alrakeen provider is paused; only one GPS provider is
+  active. If it resumes we will request it then.
+- **Twilio** — SMS alerting is not implemented. It is not a dependency of the
+  application and needs no rule.
+- **Alibaba DirectMail / third-party mail** — replaced by UNIMAC's own
+  Microsoft 365. See section H.
+
+**Not required, worth stating explicitly:** Google Maps is loaded by the
+*user's browser*, not by this server, so it needs no outbound rule here.
 
 ## G. External monitoring
 
 | # | Change | Purpose |
 | --- | --- | --- |
-| G1 | An external uptime monitor polling `https://fleet.unimaccompany.com/api/health` every 1–5 minutes | The endpoint returns HTTP 503 when the platform is unhealthy, so the monitor raises the alarm. It must run **outside** this server — that is the whole point: it keeps working when the server is the problem. In September 2026 the data pipeline was dead for 14 days with nothing to report it. The endpoint exposes a pass/fail status only, no fleet or personal data. |
+| G1 | An external uptime monitor polling `https://fleet.unimaccompany.com/api/health` every 1–5 minutes. **Service: Better Stack (free tier), hosted by them, not on any UNIMAC system. IT access: yes — we add your address to the account, so you see the same checks, alert history and uptime record we do.** If 443 is restricted to named IPs, the monitor's published IP ranges must be allowed, or it cannot reach the endpoint. | The endpoint returns HTTP 503 when the platform is unhealthy, so the monitor raises the alarm. It must run **outside** this server — that is the whole point: it keeps working when the server is the problem. In September 2026 the data pipeline was dead for 14 days with nothing to report it. The endpoint exposes a pass/fail status only, no fleet or personal data. |
 
 ## H. Items needed from UNIMAC IT
 
@@ -130,6 +150,7 @@ The server initiates these; none of them require an inbound port.
 | H1 | **Google Maps API key** — the one Faysal sent by email | The live map and all geofence rendering depend on it. Required: a billing-enabled Google Cloud project, and the key **restricted to `fleet.unimaccompany.com`** rather than unrestricted. An unrestricted key can be copied from the page source and billed to UNIMAC by anyone. |
 | H2 | RDS connection endpoint, port, engine version and the application credentials | To configure the application |
 | H3 | IT's choice on C2 (Let's Encrypt or IT-supplied certificate) and on A3 (restricted SSH or bastion/VPN) | Both are IT's call, not ours |
+| H4 | **Permission to send email through UNIMAC's Microsoft 365**, so account-setup and password-reset emails come from `no-reply@unimaccompany.com`. Preferred: an **Exchange Online connector authorising this server's IP `8.213.39.81`** to relay — no mailbox, no licence and no password stored on the server. Alternative: a licensed mailbox with SMTP AUTH enabled. | `unimaccompany.com` publishes `v=spf1 include:spf.protection.outlook.com -all` with `DMARC p=quarantine`. Any outside mail provider sending as your domain therefore fails SPF and is quarantined by your own policy, so credential emails would land in spam. Sending through your M365 needs no DNS change — your SPF, DKIM and DMARC are already correct. |
 
 ## I. Security commitments
 
@@ -139,8 +160,20 @@ The server initiates these; none of them require an inbound port.
   never shown to users.
 - The default seeded administrator password is replaced before the platform is
   made reachable.
-- User passwords are stored as one-way bcrypt hashes; provider credentials are
-  encrypted at rest; all traffic is over TLS.
+- User passwords are stored as one-way bcrypt hashes (bcrypt, cost 12).
+- API session tokens expire after 12 hours.
+- Login and password-reset endpoints are rate limited, so neither can be used
+  for password guessing or to trigger bulk email.
+- **Stated precisely, because two of these are not yet true:**
+  - **TLS:** all traffic will be over HTTPS **once a certificate is in place
+    (C2)**. If the platform is brought up on the IP address before then, that
+    interim period is plain HTTP. We will not create accounts for UNIMAC staff
+    until TLS is live, so no UNIMAC password is ever sent in clear text.
+  - **Provider credentials** are currently stored in a configuration file
+    readable only by the service account, **not yet encrypted at rest.**
+    Application-level encryption of them is planned and not yet implemented. An
+    earlier draft of this document claimed otherwise; that was incorrect and is
+    corrected here.
 - No production data is copied off the server.
 - Every change is logged in `SERVER-OPS-LOG.md` and available to IT on request.
 
