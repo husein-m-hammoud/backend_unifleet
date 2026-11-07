@@ -57,7 +57,22 @@ sudo apt install -y php8.3-fpm php8.3-cli php8.3-pgsql php8.3-mbstring \
 # dependency tree; bcmath/intl are used by the analytics and report formatting.
 
 # 2. Everything else
-sudo apt install -y nginx git unzip postgresql-client composer
+sudo apt install -y nginx git unzip postgresql-client
+
+# Composer: NOT from apt. The Ubuntu package depends on php-cli, which can pull
+# in PHP 8.1 alongside 8.3 and leave `php` pointing at the wrong version. Use
+# the official installer, with its published hash verified before executing it.
+cd /tmp
+curl -sS https://getcomposer.org/installer -o composer-setup.php
+HASH=$(curl -sS https://composer.github.io/installer.sig)
+php -r "if (hash_file('sha384','composer-setup.php') === trim('$HASH')) { echo 'verified'.PHP_EOL; } else { unlink('composer-setup.php'); exit(1); }"
+sudo php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+rm -f composer-setup.php
+
+# NOTE: the distro postgresql-client is 14, but RDS runs PostgreSQL 18. psql 14
+# can query an 18 server, but pg_dump 14 REFUSES to dump it ("server version
+# mismatch"). Install postgresql-client-18 from apt.postgresql.org before
+# setting up database backups.
 
 # 3. Mount the 200 GiB data disk at /var/www.
 #

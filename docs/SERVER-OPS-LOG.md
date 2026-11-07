@@ -178,4 +178,6 @@ with an owner, rather than an undocumented default.
 
 | 2026-11-07 | Installed the admin SSH public key into `/root/.ssh/authorized_keys` (mode 600, `.ssh` 700). Key-based login verified from a new session. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Remove the key line from `/root/.ssh/authorized_keys`. Console (VNC) access with the OS root password remains available independently of SSH. |
 
+| 2026-11-07 | Installed application runtime: **PHP 8.3.36** (`php8.3-fpm`, `-cli`, `-pgsql`, `-mbstring`, `-xml`, `-curl`, `-zip`, `-bcmath`, `-intl`) from `ppa:ondrej/php`, plus **nginx 1.18.0**, `git 2.34.1`, `unzip`, `postgresql-client 14.24`. php8.3-fpm and nginx both active. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | `apt remove` the packages and `add-apt-repository --remove ppa:ondrej/php`. Nothing outside the packages' own paths was modified. |
+
 <!-- Append new rows above this line. Newest last. One row per change. -->
