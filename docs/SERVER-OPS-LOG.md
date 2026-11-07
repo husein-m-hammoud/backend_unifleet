@@ -176,4 +176,6 @@ with an owner, rather than an undocumented default.
 
 | 2026-11-06 | Formatted the 200 GiB data disk `/dev/vdb` as ext4 (label `unifleet-data`, **UUID `d641b322-6d6f-46a8-88e8-d0c7f8510622`**) and mounted it at `/var/www` via `/etc/fstab` with `nofail`. Verified: 196G, 186G available. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Remove the `/etc/fstab` line and `umount /var/www`. The disk was raw and empty before this - no data existed to lose, and the format was guarded to abort if any filesystem signature was present. |
 
+| 2026-11-07 | Installed the admin SSH public key into `/root/.ssh/authorized_keys` (mode 600, `.ssh` 700). Key-based login verified from a new session. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Remove the key line from `/root/.ssh/authorized_keys`. Console (VNC) access with the OS root password remains available independently of SSH. |
+
 <!-- Append new rows above this line. Newest last. One row per change. -->
