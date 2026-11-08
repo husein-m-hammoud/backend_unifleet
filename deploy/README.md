@@ -172,7 +172,20 @@ sudo ln -sf /etc/nginx/sites-available/unifleet /etc/nginx/sites-enabled/uniflee
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 
-# 8. THE SCHEDULER. Without this one line nothing polls and nothing watches.
+# 8a. Run ONE full poll by hand before the scheduler takes over.
+#     `safee:poll --live-only` visits only vehicles already in the database, so
+#     on a fresh install it exits with "No active vehicles - skipping live
+#     state" and stores nothing. The FULL poll is what builds the vehicle
+#     roster. Without this the 30-second live poll spins uselessly until the
+#     first 15-minute full poll happens to run.
+#
+#     Measured on the box 2026-11-08: 2m08s for 218 vehicles. Notably faster
+#     than the 6m18s measured from a laptop in Lebanon - the server shares a
+#     region with the provider, and latency was most of that cost. The
+#     15-minute schedule therefore has plenty of headroom.
+sudo -u unifleet php artisan safee:poll --force
+
+# 8b. THE SCHEDULER. Without this one line nothing polls and nothing watches.
 sudo crontab -u unifleet /var/www/unifleet/backend/deploy/crontab
 
 # 9. Caches (last, so they capture the finished .env)
