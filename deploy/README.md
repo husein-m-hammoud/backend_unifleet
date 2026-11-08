@@ -113,7 +113,11 @@ sudo chown -R unifleet:unifleet /var/www/unifleet
 # 4. Code. Both repos are PRIVATE, so give the box a read-only deploy key per
 #    repo (GitHub > repo > Settings > Deploy keys). Never put a personal token
 #    or personal SSH key on a shared server.
-sudo -u unifleet git clone git@github.com:husein-m-hammoud/backend_unifleet.git /var/www/unifleet/backend
+#    -b main is NOT optional. The remote still carries a `master` branch holding
+#    a single orphan "Initial commit", and GitHub's default branch was set to it
+#    - so a plain `git clone` succeeds and produces an almost empty directory,
+#    which then fails in confusing ways. State the branch explicitly.
+sudo -u unifleet git clone -b main git@github-backend:husein-m-hammoud/backend_unifleet.git /var/www/unifleet/backend
 
 # 5. Config
 cd /var/www/unifleet/backend
