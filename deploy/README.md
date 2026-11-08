@@ -110,6 +110,23 @@ sudo adduser --system --group --home /var/www/unifleet --shell /usr/sbin/nologin
 sudo mkdir -p /var/www/unifleet/{backend,frontend}
 sudo chown -R unifleet:unifleet /var/www/unifleet
 
+#     `adduser --system` creates the home directory mode 750, so nginx (running
+#     as www-data) cannot traverse into it and every static file returns 403.
+#
+#     This fails in a misleading way: /api keeps working. For API requests nginx
+#     hands the path to PHP-FPM and never opens the file itself, and PHP-FPM
+#     runs as unifleet - so you get a healthy API and a 403 homepage, which
+#     reads as an nginx routing bug rather than a permissions one.
+#     `namei -l /var/www/unifleet/frontend/index.html` shows the blocked step.
+#
+#     o+x grants traversal but NOT listing. Capital X in o+rX adds execute to
+#     directories only, so PHP files do not become executable.
+#     storage/ and .env are deliberately left unifleet-only - .env holds the
+#     database and provider credentials and nginx has no business reading it.
+sudo chmod o+x /var/www /var/www/unifleet /var/www/unifleet/backend
+sudo chmod -R o+rX /var/www/unifleet/frontend
+sudo chmod -R o+rX /var/www/unifleet/backend/public
+
 # 4. Code. Both repos are PRIVATE, so give the box a read-only deploy key per
 #    repo (GitHub > repo > Settings > Deploy keys). Never put a personal token
 #    or personal SSH key on a shared server.
