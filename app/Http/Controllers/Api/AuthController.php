@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rules\Password as PasswordRule;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -100,6 +101,66 @@ class AuthController extends Controller
         }
 
         return response()->json(['message' => __($status)], 422);
+    }
+
+    /**
+     * POST /api/auth/password  (authenticated, any role)
+     * Body: { current_password, password, password_confirmation }
+     *
+     * Self-service password change. This is the ONLY way a role=user account can
+     * change its own password: UserController::changePassword is manager-gated,
+     * and forgot-password -> reset-password needs working outbound mail. Without
+     * this, a user we provision is stuck forever with the password we generated
+     * and emailed them, which is also the one most likely to have been exposed.
+     */
+    public function changePassword(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $request->validate([
+            'current_password' => ['required', 'string'],
+            'password'         => ['required', 'confirmed', PasswordRule::min(8)],
+        ]);
+
+        // A token issued before the account was disabled still authenticates
+        // (only UserController::destroy revokes tokens; editing status to
+        // 'disabled' does not), so re-check status here rather than assume the
+        // middleware caught it.
+        if ($user->status === 'disabled') {
+            return response()->json(['message' => 'This account has been deactivated.'], 403);
+        }
+
+        // Deliberately NOT Laravel's `current_password` validation rule: that
+        // rule validates against the default (session) guard, and this API
+        // authenticates with Sanctum bearer tokens, so it would reject every
+        // correct password. Checking the hash directly is the whole point.
+        if (! $user->password || ! Hash::check($request->input('current_password'), $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['That is not your current password.'],
+            ]);
+        }
+
+        if (Hash::check($request->input('password'), $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => ['The new password must be different from your current one.'],
+            ]);
+        }
+
+        $user->forceFill(['password' => $request->input('password')])->save(); // hashed by cast
+
+        // Revoke every OTHER token. Changing a password is how someone locks out
+        // a session they believe is compromised - leaving the old tokens valid
+        // would make the whole action cosmetic. The token used for THIS request
+        // survives, so the user is not bounced out of the device they just
+        // changed it on.
+        $revoked = $user->tokens()
+            ->where('id', '!=', $user->currentAccessToken()->getKey())
+            ->delete();
+
+        return response()->json([
+            'message'         => 'Password updated.',
+            'sessions_ended'  => $revoked,
+        ]);
     }
 
     /**

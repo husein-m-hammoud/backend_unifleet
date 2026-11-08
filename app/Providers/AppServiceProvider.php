@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -24,6 +25,41 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerRateLimiters();
+        $this->trustUpstreamProxy();
+    }
+
+    /**
+     * Trust an upstream TLS terminator, when there is one.
+     *
+     * Set TRUSTED_PROXIES only when TLS terminates IN FRONT of this server (an
+     * Alibaba SLB/ALB, a CDN, or a WAF). Such a proxy speaks plaintext HTTP to
+     * us and reports the real scheme in X-Forwarded-Proto; until it is trusted,
+     * Laravel reads every HTTPS request as plaintext, emits http:// URLs and
+     * redirect-loops against the proxy's own HTTPS redirect.
+     *
+     * Leave it EMPTY when nginx on this box holds the certificate. Trusting a
+     * proxy that is not there lets any client forge X-Forwarded-* and spoof its
+     * own scheme and source IP - and the API rate limiter keys unauthenticated
+     * traffic on the IP, so a spoofable IP is a bypassable login throttle.
+     *
+     * TrustProxies is already in the global middleware stack; it just trusts
+     * nothing until the static below is set. This lives here rather than in
+     * bootstrap/app.php because the withMiddleware() closure runs before the
+     * framework bootstraps config, where config() is not yet resolvable.
+     */
+    private function trustUpstreamProxy(): void
+    {
+        $proxies = config('app.trusted_proxies');
+
+        if (blank($proxies)) {
+            return;
+        }
+
+        TrustProxies::at(
+            $proxies === '*' ? '*' : array_values(array_filter(
+                array_map('trim', explode(',', $proxies))
+            ))
+        );
     }
 
     /**
@@ -65,6 +101,19 @@ class AppServiceProvider extends ServiceProvider
          * (which is how a new sending domain gets blacklisted). An hourly cap sits
          * under the per-minute one so slow, patient abuse is caught too.
          */
+        /*
+         * Self-service password change (authenticated). The current-password
+         * check makes this a password-guessing oracle for anyone holding a
+         * stolen token, so it is capped far below the 300/min the rest of the
+         * authenticated API allows. Keyed on the USER, not the IP: a whole
+         * office behind one NAT address must not share a bucket for something
+         * each of them does legitimately. The hourly cap catches slow guessing.
+         */
+        RateLimiter::for('password-change', fn (Request $request) => [
+            Limit::perMinute(5)->by('pwc:'.($request->user()?->id ?: $request->ip())),
+            Limit::perHour(20)->by('pwc-hour:'.($request->user()?->id ?: $request->ip())),
+        ]);
+
         RateLimiter::for('password', fn (Request $request) => [
             Limit::perMinute(3)->by('pw-ip:'.$request->ip()),
             Limit::perHour(15)->by('pw-ip-hour:'.$request->ip()),

@@ -42,6 +42,11 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshSafeeToken::class
     Route::prefix('auth')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('me',     [AuthController::class, 'me']);
+        // Self-service password change, open to every role. Carries its own
+        // tight limit on top of the group's: the current-password check is a
+        // guessing oracle for a stolen token, and 300/min would be too generous.
+        Route::post('password', [AuthController::class, 'changePassword'])
+            ->middleware('throttle:password-change');
     });
 
     // Dashboard
