@@ -62,6 +62,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | Set this ONLY when TLS terminates in front of this server (an Alibaba
+    | SLB/ALB, a CDN, or a WAF) rather than on the box itself. Such a proxy
+    | speaks plaintext HTTP to us and reports the real scheme in an
+    | X-Forwarded-Proto header; until the proxy is trusted, Laravel ignores
+    | that header, treats every HTTPS request as plaintext, generates http://
+    | URLs and redirect-loops against the proxy's own HTTPS redirect.
+    |
+    | Leave EMPTY when TLS terminates on this server (nginx holding the
+    | certificate). Trusting a proxy that isn't there lets any client forge
+    | X-Forwarded-* headers and spoof its scheme and source IP.
+    |
+    | Accepts a comma-separated list of proxy IPs/CIDRs, or '*' to trust any
+    | proxy. Prefer the explicit list: '*' is only safe when nothing but the
+    | proxy can reach this server, i.e. the security group restricts 80/443
+    | to the proxy's addresses.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

@@ -51,7 +51,7 @@ have constrained the PostgreSQL version.
 | # | Change | Purpose |
 | --- | --- | --- |
 | C1 | ~~A record `fleet.unimaccompany.com` → `8.213.39.81`~~ — **COMPLETED 2026-11-03 by UNIMAC IT.** Verified by external DNS lookup. No further action. | IT action — UNIMAC controls the domain |
-| C2 | TLS certificate for `fleet.unimaccompany.com` | Installed on this server either way. Option 1: we issue free Let's Encrypt on the box, auto-renewing (needs C1 live and A2 open) — no IT action. Option 2: IT supplies a certificate and private key and we install it, with IT tracking renewal. IT's choice. |
+| C2 | TLS certificate for `fleet.unimaccompany.com` | **IT has chosen to supply TLS ("global SSL"), stated 2026-11-08 — Option 2.** Let's Encrypt (Option 1) is therefore not being issued, to avoid two renewal mechanisms with no clear owner. **Three things still needed before this can be installed** (see H3): (a) where TLS terminates — on this ECS, or upstream at an SLB/CDN/WAF; (b) that the certificate actually covers the `fleet.` hostname, not just the apex and `www`; (c) who tracks expiry and performs renewal. |
 | C3 | Force HTTPS; HTTP serves only the redirect | No application traffic in clear text |
 
 ## D. Software installed on the server
@@ -149,7 +149,14 @@ reserved.
 | --- | --- | --- |
 | H1 | **Google Maps API key** — the one Faysal sent by email | The live map and all geofence rendering depend on it. Required: a billing-enabled Google Cloud project, and the key **restricted to `fleet.unimaccompany.com`** rather than unrestricted. An unrestricted key can be copied from the page source and billed to UNIMAC by anyone. |
 | H2 | RDS connection endpoint, port, engine version and the application credentials | To configure the application |
-| H3 | IT's choice on C2 (Let's Encrypt or IT-supplied certificate) and on A3 (restricted SSH or bastion/VPN) | Both are IT's call, not ours |
+| H3 | ~~IT's choice on C2~~ — **ANSWERED 2026-11-08: IT will supply "global SSL".** Four follow-ups now needed: **(1)** does TLS terminate on this ECS (send us the certificate + private key + full chain) or in front of it (SLB / CDN / WAF)? **(2)** if in front — does the `fleet.unimaccompany.com` A record change, and which source IPs should 80/443 then be restricted to? **(3)** does the certificate cover `fleet.unimaccompany.com` — a wildcard `*.unimaccompany.com` does, but a cert listing only `unimaccompany.com` and `www` does **not**, and browsers will show a name-mismatch warning on every visit. **(4)** target date, and who renews it. | The terminate-where answer changes our server config *and* the application code (see the note below this table). A2/A3 are already answered by the live security group — see `SERVER-OPS-LOG.md` §4.2. |
+
+> **Why question (1) is not a detail.** If TLS terminates upstream, the application
+> sits behind a proxy and Laravel is not currently configured to trust one — no
+> `trustProxies` is set in `bootstrap/app.php`. Left as-is it would read every
+> HTTPS request as plaintext HTTP, emit `http://` URLs and redirect-loop against
+> the proxy's own HTTPS redirect. That is a small code change, but it has to be
+> made *before* the switch, not diagnosed after it.
 | H4 | **Permission to send email through UNIMAC's Microsoft 365**, so account-setup and password-reset emails come from `no-reply@unimaccompany.com`. Preferred: an **Exchange Online connector authorising this server's IP `8.213.39.81`** to relay — no mailbox, no licence and no password stored on the server. Alternative: a licensed mailbox with SMTP AUTH enabled. | `unimaccompany.com` publishes `v=spf1 include:spf.protection.outlook.com -all` with `DMARC p=quarantine`. Any outside mail provider sending as your domain therefore fails SPF and is quarantined by your own policy, so credential emails would land in spam. Sending through your M365 needs no DNS change — your SPF, DKIM and DMARC are already correct. |
 
 ## I. Security commitments

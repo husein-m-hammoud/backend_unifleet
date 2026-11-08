@@ -6,18 +6,24 @@
 **Document purpose:** audit and compliance record of every change made to
 UNIMAC-managed infrastructure (Alibaba Cloud ECS / RDS), and the approval trail
 for each one.
-**Last updated:** 2026-10-31
+**Last updated:** 2026-11-08
 
 ---
 
 ## 1. Current status
 
-**No changes have been made to any UNIMAC-managed server to date.**
-An ECS instance has been provisioned by UNIMAC IT (see section 2) and read-only
-console inspection has been performed, but nothing on it has been installed,
-configured or modified, and no RDS instance exists yet. All development to date
-has taken place on the developer's local machine. The change log in section 5 is
-therefore empty by design, not by omission.
+**The platform is installed and running, and is publicly reachable over
+plaintext HTTP.** As of 2026-11-08 the ECS runs PHP 8.3 / nginx serving the SPA
+and API, the RDS schema is migrated and seeded, and the poller and scheduler are
+live. Inbound 80 and 443 have been open to `0.0.0.0/0` since the instance was
+created on 2026-09-30 (section 4.2), and `fleet.unimaccompany.com` has resolved
+to the box since 2026-11-03 — so the dashboard is serving the public internet
+without TLS. Issuing the certificate is the next action. Every change made to
+date is recorded in section 5.
+
+*(This paragraph previously read "No changes have been made to any
+UNIMAC-managed server to date." It was left stale as the change log filled up,
+and was corrected on 2026-11-08.)*
 
 ## 2. Infrastructure inventory
 
@@ -119,10 +125,16 @@ read-only diagnostics (`php artisan unifleet:doctor`, `GET /api/health`).
 **Change record requirement:** every entry in section 5 states date, who
 requested it, who approved it, what was changed, why, and how to roll it back.
 
-## 4. Ports that will be requested (not yet open, not yet approved)
+## 4. Ports — the surface we intended to request
 
-Listed here so IT can review the full intended surface in advance. Each one
-still requires explicit approval before it is enabled.
+> **Superseded in part. See section 4.2.** This section was written on the
+> assumption that no inbound port was open. That assumption was wrong: a default
+> security group created with the instance on 2026-09-30 has had 80, 443, 3389
+> and ICMP open to `0.0.0.0/0` the whole time. Section 4.2 records the actual
+> state as read from the console on 2026-11-08. The table below is retained
+> because it is still the surface we *want*; it is not a description of reality.
+
+Listed here so IT can review the full intended surface in advance.
 
 | Port | Protocol | Source | Purpose | Status |
 | --- | --- | --- | --- | --- |
@@ -162,6 +174,99 @@ hardening added on 2026-10-31 all assume the transport is private.
 This entry exists so the interim exposure is a recorded, time-boxed decision
 with an owner, rather than an undocumented default.
 
+### 4.2 Actual security-group state — read from the console 2026-11-08
+
+The inbound rules below were **not created by us and were never requested**.
+All five are marked `System created rule.` with an identical creation timestamp
+of `Sep 30, 2026, 12:10:25` — the moment the instance was provisioned. They are
+Alibaba's default security-group template, which is Windows-oriented (hence the
+RDP rule). Every rule is priority 100.
+
+| Priority | Protocol | Port | Source | Assessment |
+| --- | --- | --- | --- | --- |
+| 100 | TCP | 22 (SSH) | `80.83.29.67/32` | **Correct, and better than this log recorded.** Single-host restricted. |
+| 100 | TCP | 443 (HTTPS) | `0.0.0.0/0` | Intended. Nothing listens on 443 yet (no certificate). |
+| 100 | TCP | 80 (HTTP) | `0.0.0.0/0` | Intended for ACME + redirect. Currently serving the full application. |
+| 100 | ICMP | All (-1/-1) | `0.0.0.0/0` | Benign. Keep — needed for `ping`-based monitoring. |
+| 100 | TCP | 3389 (RDP) | `0.0.0.0/0` | **Should be deleted.** No RDP service on Ubuntu; pure attack surface. |
+
+No inbound rule exists for 5432, which is correct — PostgreSQL is reached over
+the VPC via the RDS whitelist (`192.168.0.197`), never from the internet.
+
+**Three corrections to earlier entries in this document:**
+
+1. **The claim "no inbound ports are open / nothing is publicly reachable",
+   recorded twice against 2026-11-08 in section 5, is false.** Ports 80 and 443
+   have been open to the world since instance creation. Combined with the DNS A
+   record live since 2026-11-03 and the nginx site enabled on 2026-11-08, the
+   dashboard and API have been **publicly reachable over plaintext HTTP at
+   `http://fleet.unimaccompany.com` since 2026-11-08**. This was an unplanned
+   exposure — the interim HTTP-only phase of section 4.1 went live without
+   anyone deciding it had.
+2. **The 2026-11-05 note "Port 22 remains open to 0.0.0.0/0 at the time of
+   writing" is false.** SSH has been restricted to `80.83.29.67/32` since
+   2026-09-30. The SSH hardening done on 2026-11-06 was therefore defence in
+   depth on an already-restricted port, not a fix for a world-open one.
+3. **The Let's Encrypt blocker recorded as unresolved does not currently
+   exist.** Port 80 is open to `0.0.0.0/0`, so HTTP-01 validation will succeed
+   today with no IT action and no DNS-01 fallback. This is a window, not a
+   settled state: IT has expressed an intent to IP-restrict all ports including
+   80 and 443, and if port 80 is narrowed, both issuance *and every 60-day
+   renewal* break. Either 80 stays world-open for ACME, or renewal moves to
+   DNS-01 and IT must supply a DNS API credential.
+
+**Consequence for section 4.1's accepted risk.** Condition 2 of that acceptance
+("any credential typed into the site over HTTP is considered compromised") is now
+live rather than hypothetical. The seeded owner password has been exposed to
+plaintext transport on a publicly reachable host and must be rotated once TLS is
+in place. Condition 1 holds — no UNIMAC end-user accounts exist yet.
+
+### 4.3 TLS — IT will supply it (stated 2026-11-08)
+
+UNIMAC IT has said they will add "global SSL". This resolves the C2 choice in
+`DEPLOYMENT-APPROVAL-REQUEST.md` in favour of an IT-supplied certificate, so
+**Let's Encrypt is not being issued** — two renewal mechanisms with no clear
+owner is worse than one. The open questions are recorded against H3 there.
+
+**Until that certificate is live the plaintext exposure in section 4.2 continues,
+and "will add" carries no date.** Two ways to close it in the meantime, both
+requiring approval:
+
+- **Restrict 80 and 443 to `80.83.29.67/32`** — one console change, no
+  certificate needed, and it matches IT's own stated preference for
+  IP-restricted ports. The platform has no end users yet, so the only cost is
+  that nobody else can reach the site, including for a client demo.
+- **Issue Let's Encrypt anyway as a stopgap** and replace it when IT's
+  certificate arrives. Keeps the site publicly reachable and encrypted today.
+  Requires port 80 to stay world-open for HTTP-01 validation.
+
+**Decision (2026-11-08, Hussein Hammoud, owner of record): leave 80 and 443 open
+and wait for IT's certificate.** Neither interim measure is taken. The platform
+therefore continues to serve a plaintext login to the public internet until IT
+delivers TLS, and the §4.1 interim-phase acceptance remains in force for that
+whole period rather than the days it was originally scoped for.
+
+What this decision does **not** change — the conditions attached to the §4.1
+acceptance still bind:
+
+1. **No UNIMAC end-user accounts until TLS is live.** Every password this
+   platform issues is emailed and then typed into a plaintext login form. The
+   existing guidance in `deploy/README.md` ("do not create user accounts until
+   mail works") now has a second, independent reason behind it.
+2. **Rotate the seeded owner password once TLS is live**, and treat anything
+   typed into the site before then as compromised.
+3. **Chase IT for a date.** The risk here is not the exposure itself so much as
+   it being open-ended; "they will add it" with no date is how an interim phase
+   becomes the deployment. If it slips beyond a few days, revisit the two
+   options above — restricting 80/443 to `80.83.29.67/32` is a one-click change
+   that can be made at any point.
+
+Mitigations already in place, for the record: the login endpoint is rate-limited
+(`AppServiceProvider::registerRateLimiters`), SSH is restricted to a single
+address, and the only account on the system is the developer's. The residual
+exposure is transport confidentiality, which no application-level control can
+compensate for.
+
 ## 5. Change log
 
 | Date | Change | Requested by | Approved by | Rollback |
@@ -182,9 +287,9 @@ with an owner, rather than an undocumented default.
 
 | 2026-11-08 | **RDS prepared and schema created.** Whitelisted ECS private IP `192.168.0.197`; created privileged account `unifleet_app` and database `unifleet` (UTF8); ran `php artisan migrate --force` (41 tables) and `db:seed --force` (21 settings, 1 owner account). Verified: PostgreSQL **18.6**, endpoint `pgm-l4v1rlvsu471844x.pgsql.me-central-1.rds.aliyuncs.com:5432`. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Drop the `unifleet` database and the `unifleet_app` account; remove `192.168.0.197` from the whitelist. The database was empty beforehand - no data existed to lose. |
 
-| 2026-11-08 | **Platform brought up.** Installed the PHP-FPM pool (runs as `unifleet`) and the nginx site; `nginx -t` passed. Ran the first full provider poll (218 vehicles, 215 positions, 2m08s). Installed the scheduler crontab for `unifleet` (`* * * * * php artisan schedule:run`). `GET /api/health` returns JSON with only `ops_alerts` failing. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | `crontab -r -u unifleet` stops all polling; remove `/etc/nginx/sites-enabled/unifleet` and `/etc/php/8.3/fpm/pool.d/unifleet.conf` and reload both services to take the site down. No ports are open to the internet yet, so nothing is publicly reachable. |
+| 2026-11-08 | **Platform brought up.** Installed the PHP-FPM pool (runs as `unifleet`) and the nginx site; `nginx -t` passed. Ran the first full provider poll (218 vehicles, 215 positions, 2m08s). Installed the scheduler crontab for `unifleet` (`* * * * * php artisan schedule:run`). `GET /api/health` returns JSON with only `ops_alerts` failing. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | `crontab -r -u unifleet` stops all polling; remove `/etc/nginx/sites-enabled/unifleet` and `/etc/php/8.3/fpm/pool.d/unifleet.conf` and reload both services to take the site down. No ports are open to the internet yet, so nothing is publicly reachable. **[CORRECTED 2026-11-08 — this was wrong; 80/443 were open. See section 4.2.]** |
 
-| 2026-11-08 | **Install complete.** Cached config/routes/views/events; granted the service account a single sudo rule (`systemctl reload php8.3-fpm`); built the dashboard on a workstation and rsynced it to `/var/www/unifleet/frontend`; relaxed directory traversal so nginx can read static files. Verified locally: homepage 200, SPA deep link 200, `/api/health` 503 with only `ops_alerts` failing. `unifleet:doctor` green on 14 of 15 checks. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Each step is individually reversible; see `deploy/README.md`. Nothing is publicly reachable - no inbound ports are open. |
+| 2026-11-08 | **Install complete.** Cached config/routes/views/events; granted the service account a single sudo rule (`systemctl reload php8.3-fpm`); built the dashboard on a workstation and rsynced it to `/var/www/unifleet/frontend`; relaxed directory traversal so nginx can read static files. Verified locally: homepage 200, SPA deep link 200, `/api/health` 503 with only `ops_alerts` failing. `unifleet:doctor` green on 14 of 15 checks. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Each step is individually reversible; see `deploy/README.md`. Nothing is publicly reachable - no inbound ports are open. **[CORRECTED 2026-11-08 — this was wrong; 80/443 were open. See section 4.2.]** |
 
 | 2026-11-08 | System timezone changed from `Asia/Shanghai` (the Alibaba image default, UTC+8) to **`Asia/Riyadh`** (UTC+3); `cron` and `php8.3-fpm` restarted to pick it up. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | `timedatectl set-timezone Asia/Shanghai`. No application behaviour depends on this: Laravel stores in UTC via `config('app.timezone')`, the pgsql connection stays UTC, and `routes/console.php` sets `->timezone('Asia/Riyadh')` explicitly for report schedules. Only log and filesystem timestamps change. |
 

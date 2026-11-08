@@ -159,6 +159,21 @@ LOG_DAILY_DAYS=14
 
 Leave `DB_TIMEZONE` alone — the pgsql connection must stay UTC.
 
+**`TRUSTED_PROXIES` — set it only if TLS terminates somewhere other than this
+box.** UNIMAC IT have said they will supply "global SSL" (2026-11-08). If that
+turns out to be an Alibaba SLB/ALB, a CDN or a WAF in front of the instance,
+then the proxy speaks plaintext HTTP to us and reports the real scheme in
+`X-Forwarded-Proto`. Until that proxy is listed in `TRUSTED_PROXIES`, Laravel
+reads every HTTPS request as plaintext, generates `http://` URLs and
+redirect-loops against the proxy's own HTTPS redirect — so this must be set
+*before* the cutover, not diagnosed after it. If instead IT hand over a
+certificate and key for nginx on this box to serve, leave it **empty**:
+trusting a proxy that is not in front of us lets any client forge
+`X-Forwarded-*` and spoof its scheme and source IP, and the API rate limiter
+keys unauthenticated traffic on the IP, so a spoofable IP means a bypassable
+login throttle. Verified both ways (empty, and `10.0.0.0/8` with `config:cache`
+active) on 2026-11-08.
+
 **`FRONTEND_URL` is not cosmetic.** The new-account email's "Sign in" button and
 every password-reset link are built from it. Left at the `.env.example`
 localhost value, users are emailed links to their own machine — the mail sends,
