@@ -186,4 +186,6 @@ with an owner, rather than an undocumented default.
 
 | 2026-11-08 | **Install complete.** Cached config/routes/views/events; granted the service account a single sudo rule (`systemctl reload php8.3-fpm`); built the dashboard on a workstation and rsynced it to `/var/www/unifleet/frontend`; relaxed directory traversal so nginx can read static files. Verified locally: homepage 200, SPA deep link 200, `/api/health` 503 with only `ops_alerts` failing. `unifleet:doctor` green on 14 of 15 checks. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Each step is individually reversible; see `deploy/README.md`. Nothing is publicly reachable - no inbound ports are open. |
 
+| 2026-11-08 | System timezone changed from `Asia/Shanghai` (the Alibaba image default, UTC+8) to **`Asia/Riyadh`** (UTC+3); `cron` and `php8.3-fpm` restarted to pick it up. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | `timedatectl set-timezone Asia/Shanghai`. No application behaviour depends on this: Laravel stores in UTC via `config('app.timezone')`, the pgsql connection stays UTC, and `routes/console.php` sets `->timezone('Asia/Riyadh')` explicitly for report schedules. Only log and filesystem timestamps change. |
+
 <!-- Append new rows above this line. Newest last. One row per change. -->
