@@ -39,11 +39,11 @@ Recorded from the Alibaba Cloud console on 2026-10-29.
 | Billing method | Subscription |
 | Region | Saudi Arabia (Riyadh) `me-central-1` — confirmed |
 | Subscription expiry | 2027-09-30 18:59:59 |
-| RDS instance | `pgm-l4v1rlvsu471844x` — name `FleetAI`, **PostgreSQL 18.0**, Regular Instance, Running |
+| RDS instance | `pgm-l4v1rlvsu471844x` — name `FleetAI`, **PostgreSQL 18.6** (console reported 18.0; the running server reports 18.6), Regular Instance, Running |
 | RDS network | VPC `vpc-l4vo9dyye94qqyua8m0zx`, Riyadh Zone A |
 | RDS billing | Subscription with auto-renewal, created 2026-09-30, expires 2027-09-30 |
-| RDS internal endpoint | TO CONFIRM |
-| RDS whitelist | TO CONFIRM — must allow only `192.168.0.197` |
+| RDS internal endpoint | `pgm-l4v1rlvsu471844x.pgsql.me-central-1.rds.aliyuncs.com:5432` — confirmed by a live connection from the ECS 2026-11-08 |
+| RDS whitelist | `192.168.0.197` (ECS private IP) only — set 2026-11-08 |
 | RDS backups | TO CONFIRM — automatic backups + one test restore |
 | Operating system | Ubuntu 22.04 LTS x64 (image `ubuntu_22_04_x64_20G_alibase_20260810.vhd`) |
 | System disk | **50 GiB** (`vda3`, ext4, mounted `/`) — confirmed on the box 2026-11-05. The image name says `20G`, which is the image size, not the provisioned disk. |
@@ -179,5 +179,7 @@ with an owner, rather than an undocumented default.
 | 2026-11-07 | Installed the admin SSH public key into `/root/.ssh/authorized_keys` (mode 600, `.ssh` 700). Key-based login verified from a new session. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Remove the key line from `/root/.ssh/authorized_keys`. Console (VNC) access with the OS root password remains available independently of SSH. |
 
 | 2026-11-07 | Installed application runtime: **PHP 8.3.36** (`php8.3-fpm`, `-cli`, `-pgsql`, `-mbstring`, `-xml`, `-curl`, `-zip`, `-bcmath`, `-intl`) from `ppa:ondrej/php`, plus **nginx 1.18.0**, `git 2.34.1`, `unzip`, `postgresql-client 14.24`. php8.3-fpm and nginx both active. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | `apt remove` the packages and `add-apt-repository --remove ppa:ondrej/php`. Nothing outside the packages' own paths was modified. |
+
+| 2026-11-08 | **RDS prepared and schema created.** Whitelisted ECS private IP `192.168.0.197`; created privileged account `unifleet_app` and database `unifleet` (UTF8); ran `php artisan migrate --force` (41 tables) and `db:seed --force` (21 settings, 1 owner account). Verified: PostgreSQL **18.6**, endpoint `pgm-l4v1rlvsu471844x.pgsql.me-central-1.rds.aliyuncs.com:5432`. | Cedars Technology (Hussein Hammoud) | Hussein Hammoud (owner of record) | Drop the `unifleet` database and the `unifleet_app` account; remove `192.168.0.197` from the whitelist. The database was empty beforehand - no data existed to lose. |
 
 <!-- Append new rows above this line. Newest last. One row per change. -->
