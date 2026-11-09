@@ -11,7 +11,9 @@ rather than implying we have chased it before.
 
 **Internal notes — delete before sending:**
 
-- Replace `[Name]`, `[your number]` and the two `[…]` placeholders.
+- Two placeholders to replace: **`[Name]`** (the addressee — Faysal sent the
+  Maps key, so he may be right or can forward) and **`[username]`** in the login
+  block.
 - **Do NOT put the password in this email.** The draft deliberately omits it and
   says it follows separately. Reason: the site has no TLS yet, so that password
   crosses the network in clear text at every login — putting it in an email as
@@ -27,7 +29,7 @@ rather than implying we have chased it before.
   UNIMAC end-user accounts before TLS. You are choosing to go ahead; the draft
   handles it by marking the password temporary and asking them to change it once
   HTTPS is live. They can now do that themselves from the user menu.
-- The **coming-soon page** in section 5 is offered as a question, not announced.
+- The **coming-soon page** (section 4) is offered as a question, not announced.
   Technically it is an nginx change: serve a holding page to everyone except a
   short IP allowlist, with the real dashboard reachable from their office and
   ours. It needs no certificate and it is the one measure that actually reduces
