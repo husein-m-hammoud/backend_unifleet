@@ -653,6 +653,8 @@ Every vehicle/driver/site/alert/dashboard query funnels through `$user->vehicleQ
 ## 12. Pending / Open Items
 
 ### Done (session 17 — 2026-11-09, `support` role for the UNIMAC helpdesk)
+> **⚠️ The role is HIDDEN in the UI (2026-11-09, client's call) but fully live on the API.** No new support account can be created from the Users page; `role: 'support'` is still accepted by `POST/PUT /api/users` and every gate below still honours it. So a support account created via the API works completely — it just cannot be made through the dashboard. See the frontend CLAUDE.md §5f banner for the one-line restore.
+
 - [x] **Fourth role `support`** — full read visibility, zero administrative power. **No migration needed:** `users.role` is a plain `string` column with no enum/check constraint, so the value is accepted as-is; only `UserController::ROLES` gates it.
 - [x] **The design rule that makes this safe: `support` is deliberately NOT in `isManager()`.** Every administrative write in the app gates on `isManager()` or the `manager` middleware, so leaving support out means **all of those exclude it automatically** rather than each one needing to learn about a new role. New helpers instead: **`isSupport()`** and **`seesWholeFleet()`** (= owner|admin|support).
 - [x] **What changed, and only this:** `canSeeAllZones()` → `seesWholeFleet() || all_zones` (so `vehicleQuery()` returns the whole fleet); `EnsurePageAccess` bypass → `seesWholeFleet()` (so support passes `page:fuel|ai|heatmap|reports`); `ROLES` + the list ordering; `is_support` in both user payloads.
