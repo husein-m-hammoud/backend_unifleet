@@ -17,12 +17,21 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  */
 class EnsureOwner
 {
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next, ?string $mode = null)
     {
-        if (! $request->user()?->isOwner()) {
-            throw new AccessDeniedHttpException('Owner access required.');
+        $user = $request->user();
+
+        if ($user?->isOwner()) {
+            return $next($request);
         }
 
-        return $next($request);
+        // `owner:read` also admits support, safe methods only — so a helpdesk
+        // account can read the diagnostics report, the logs and the provider
+        // failure history, but cannot fire `POST test-alert`.
+        if ($mode === 'read' && $user?->isSupport() && $request->isMethodSafe()) {
+            return $next($request);
+        }
+
+        throw new AccessDeniedHttpException('Owner access required.');
     }
 }

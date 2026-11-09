@@ -92,16 +92,18 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshSafeeToken::class
     Route::post('zones',             [ZoneController::class, 'storeZone']);
     Route::put('zones/{id}',         [ZoneController::class, 'update'])->whereNumber('id');
 
-    // Zone responsibles / contacts (admin only). Notify these about zone issues.
-    Route::middleware('manager')->group(function () {
+    // Zone responsibles / contacts. Writes are manager-only; `manager:read` lets a
+    // support account read the list (safe methods only - see EnsureManager).
+    Route::middleware('manager:read')->group(function () {
         Route::get('contacts',        [ContactController::class, 'index']);
         Route::post('contacts',       [ContactController::class, 'store']);
         Route::put('contacts/{id}',   [ContactController::class, 'update'])->whereNumber('id');
         Route::delete('contacts/{id}', [ContactController::class, 'destroy'])->whereNumber('id');
     });
 
-    // User management (manager-only — enforced by middleware AND controller).
-    Route::middleware('manager')->group(function () {
+    // User management. Writes are manager-only - enforced by middleware AND
+    // controller. `manager:read` admits support for the GET only.
+    Route::middleware('manager:read')->group(function () {
         Route::get('users',        [UserController::class, 'index']);
         Route::post('users',       [UserController::class, 'store']);
         Route::put('users/{id}',   [UserController::class, 'update'])->whereNumber('id');
@@ -127,10 +129,11 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshSafeeToken::class
         Route::get('reports/{id}',  [ReportController::class, 'show'])->whereNumber('id');
     });
 
-    // Diagnostics / System page — OWNER ONLY. Exposes log contents, config
-    // state and provider failure history, so it is gated by role, not by the
-    // absence of a nav link.
-    Route::middleware('owner')->prefix('admin/diagnostics')->group(function () {
+    // Diagnostics / System page — owner, plus support for reads only. Exposes
+    // log contents, config state and provider failure history, so it is gated by
+    // role, not by the absence of a nav link. `owner:read` keeps POST
+    // test-alert owner-only while opening the three GETs to support.
+    Route::middleware('owner:read')->prefix('admin/diagnostics')->group(function () {
         Route::get('/',           [DiagnosticsController::class, 'index']);
         Route::get('logs',        [DiagnosticsController::class, 'logs']);
         Route::get('failures',    [DiagnosticsController::class, 'failures']);

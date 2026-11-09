@@ -78,6 +78,20 @@ class User extends Authenticatable
         return $this->role === 'support';
     }
 
+    /**
+     * May this account READ the administrative pages — users, contacts and the
+     * System/diagnostics page? True for managers and for support.
+     *
+     * Read only. Support must never pass a write gate, which is enforced
+     * separately: the `manager:read` / `owner:read` middleware admits support
+     * only for safe HTTP methods, and the controllers' own write guards still
+     * call isManager()/isOwner() directly.
+     */
+    public function canViewAdmin(): bool
+    {
+        return $this->isManager() || $this->isSupport();
+    }
+
     /** Roles that are never zone-scoped: they see every vehicle in the fleet. */
     public function seesWholeFleet(): bool
     {

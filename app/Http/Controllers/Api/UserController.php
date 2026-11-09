@@ -30,10 +30,11 @@ class UserController extends Controller
 
     private const ROLES = ['owner', 'admin', 'support', 'user'];
 
-    /** GET /api/users — list all accounts with their grants. */
+    /** GET /api/users — list all accounts with their grants. Read-only, so a
+     * support account may view it; every write below still calls ensureManager(). */
     public function index(Request $request): JsonResponse
     {
-        $this->ensureManager($request);
+        $this->ensureCanView($request);
 
         $users = User::with(['grantedZones:id,name,site_id', 'grantedSites:id,name'])
             ->orderByRaw("array_position(ARRAY['owner','admin','support','user']::text[], role)")
@@ -283,6 +284,18 @@ class UserController extends Controller
             'vehicles_count'    => $u->vehicleQuery()->count(),
             'created_at'        => $u->created_at,
         ];
+    }
+
+    /**
+     * Read access to this controller's listing: managers, plus support.
+     * Deliberately separate from ensureManager() so that widening read access
+     * can never widen write access by accident.
+     */
+    private function ensureCanView(Request $request): void
+    {
+        if (! $request->user()?->canViewAdmin()) {
+            throw new AccessDeniedHttpException('Manager access required.');
+        }
     }
 
     private function ensureManager(Request $request): void

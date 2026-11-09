@@ -16,10 +16,11 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  */
 class ContactController extends Controller
 {
-    /** GET /api/contacts — all contacts with their zone assignment. */
+    /** GET /api/contacts — all contacts with their zone assignment. Read-only, so
+     * a support account may view it; the writes below still call ensureAdmin(). */
     public function index(Request $request): JsonResponse
     {
-        $this->ensureAdmin($request);
+        $this->ensureCanView($request);
 
         $totalZones = Zone::count();
 
@@ -156,6 +157,17 @@ class ContactController extends Controller
             'created_at'  => $c->created_at,
             'created_by'  => $c->creator?->name,
         ];
+    }
+
+    /**
+     * Read access to the contact list: admins/owners, plus support. Kept
+     * separate from ensureAdmin() so widening reads cannot widen writes.
+     */
+    private function ensureCanView(Request $request): void
+    {
+        if (! $request->user()?->canViewAdmin()) {
+            throw new AccessDeniedHttpException('Admin access required.');
+        }
     }
 
     private function ensureAdmin(Request $request): void
