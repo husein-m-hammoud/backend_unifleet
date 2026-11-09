@@ -1,162 +1,135 @@
-# Email draft — platform live + follow-up on SSL, Maps key and SMTP
+# Email draft — platform live + follow-up on SMTP, Maps key and SSL
 
 **To:** UNIMAC IT
 **From:** Hussein Hammoud, Cedars Technology
-**Drafted:** 2026-11-09
+**Drafted:** 2026-11-09 (rewritten to the content Hussein specified)
 **Status:** draft, not sent
-**Supersedes:** `IT-EMAIL-SSL.md` (SSL-only draft, 2026-11-08) — **that draft was
-never sent**, so this is the first written contact with IT about SSL. Section 1 is
-worded accordingly: it acknowledges that they offered the certificate verbally
-rather than implying we have chased it before.
+**Supersedes:** `IT-EMAIL-SSL.md` (SSL-only draft, 2026-11-08) — **never sent**, so
+this is the first written contact with IT about SSL.
 
 **Internal notes — delete before sending:**
 
-- Two placeholders to replace: **`[Name]`** (the addressee — Faysal sent the
-  Maps key, so he may be right or can forward) and **`[username]`** in the login
-  block.
-- **Do NOT put the password in this email.** The draft deliberately omits it and
-  says it follows separately. Reason: the site has no TLS yet, so that password
-  crosses the network in clear text at every login — putting it in an email as
-  well means it is sitting in two mailboxes and a mail server indefinitely. Send
-  it by WhatsApp or read it over the phone.
-- **Decide what kind of account IT gets.** If they are only reviewing the system,
-  give them a **support** (read-only) account: sees every page, every vehicle and
-  every report, changes nothing. If they need to configure zones or create their
-  own users, they need **admin**. The draft says "read-only" — change it if you
-  give them admin. Note the Support option is currently hidden from the Add-user
-  dropdown, so create it via the API or unhide it first.
-- **Creating this account is the §4.1 condition-1 decision**, the one that said no
-  UNIMAC end-user accounts before TLS. You are choosing to go ahead; the draft
-  handles it by marking the password temporary and asking them to change it once
-  HTTPS is live. They can now do that themselves from the user menu.
-- The **coming-soon page** (section 4) is offered as a question, not announced.
-  Technically it is an nginx change: serve a holding page to everyone except a
-  short IP allowlist, with the real dashboard reachable from their office and
-  ours. It needs no certificate and it is the one measure that actually reduces
-  the plaintext-login exposure while TLS is pending. It also needs your approval
-  and an ops-log row before I touch the server.
-- The RDP item is carried over from the superseded draft. Cut it if you would
-  rather keep this email to three topics.
+- Placeholders: **`[Name]`**, **`[username]`**, **`[password]`**.
+- **The account must be `admin`, not `support`.** The email tells them they can
+  create users, and only owner/admin can. A read-only support account cannot.
+- **The Maps section changed meaning.** Production is currently running on
+  **your own** Google Maps API key, so UNIMAC's map usage is billed to you right
+  now. The ask is therefore for *their* key on *their* billing-enabled project —
+  not merely to restrict the existing one. Worth chasing: every week they take is
+  a week of your card paying for their fleet map.
+- **You asked for the password to be in the email, so it is in**, with the
+  change-on-login line you wanted. Noting once without labouring it: that
+  password crosses the network in clear at every login until TLS lands, and now
+  also sits in two mailboxes. The change-on-login instruction is what limits the
+  damage — keep that line.
+- Still open but deliberately **not** in this email, to keep it to your points:
+  the world-open RDP rule (TCP 3389) on the security group. Add it as a footnote
+  if you want it raised now.
 
 ---
 
 ## Copy from here
 
-**Subject:** UNIFLEET is live — and four things we need from IT
+**Subject:** UNIFLEET is live — please take a look, and three things we still need
 
 Hi [Name],
 
-**The platform is live.** UNIFLEET is running on the Riyadh ECS at
-`fleet.unimaccompany.com`, pulling live data for all 218 vehicles, with the
-database on the RDS instance. The dashboard, live map, alerts, fuel view and the
-reporting and analytics pages are all working against real fleet data.
+**UNIFLEET is live.** You can open it now at **http://fleet.unimaccompany.com**
 
-I'd like to get you into it so you can see where we are — login details are at the
-end of this email.
+- **Username:** `[username]`
+- **Password:** `[password]` — please change this once you log in (menu under your
+  name, top right → Change Password)
 
-Four things are outstanding on your side, and all four now block the same thing:
-handing this over to UNIMAC's users.
+It's running on the Riyadh server, pulling live data for all 218 vehicles into the
+RDS database. The dashboard, live map, alerts, fuel, reports and analytics pages
+are all working against real fleet data — not samples.
+
+**What I'd like from you:** please go through the site and tell me what you think.
+Anything that looks wrong, missing or confusing is useful at this stage. You can
+also create users yourself if you want to add your own people — just note that
+**no emails will be delivered yet** (see item 1), so you'd need to pass new
+passwords on manually until that's sorted.
+
+Your browser will warn the site is "Not secure". That's expected until the
+certificate is in, which is item 3.
 
 ---
 
-**1. SSL / HTTPS — the four details we need from you**
+**1. Email sending (SMTP)**
 
-Thanks for confirming you'll be adding SSL for the domain. This is the item
-holding everything else up: until the certificate is in place the dashboard is
-served over plain HTTP, which means every password typed into it crosses the
-network readable. That is why we have not created any UNIMAC user accounts yet.
-
-Four things we need before we can install it, whichever way you're going:
-
-- **Where does the certificate terminate** — on the server (send us the
-  certificate, the private key and the intermediate/chain and we'll install it on
-  nginx), or in front of it on an SLB/CDN/WAF?
-- **If in front:** does the `fleet.unimaccompany.com` A record change, and which
-  source IPs should we then allow on ports 80 and 443?
-- **Does the certificate cover the `fleet.` hostname?** A wildcard
-  `*.unimaccompany.com` does; one issued only for `unimaccompany.com` and
-  `www.unimaccompany.com` does not, and browsers would warn on every visit.
-- **Expiry date, who renews it, and roughly when can we expect it?**
-
-**2. Google Maps API key — it can now be locked down**
-
-We have the key and the map is working, so nothing is blocked here. But the key
-still needs restricting, and until last week it couldn't be: Google's Maps
-JavaScript restrictions work on an HTTP referrer, which needs a real hostname,
-and `fleet.unimaccompany.com` only started resolving on 3 November. That hostname
-now exists, so the restriction can finally be applied.
-
-Two things to confirm:
-
-- **Restrict the key to `fleet.unimaccompany.com`** in the Google Cloud console
-  (Credentials → the key → Application restrictions → Websites). An unrestricted
-  key can be lifted straight out of the page source by anyone who visits the site
-  and billed to UNIMAC's project.
-- **Confirm billing is enabled** on the project the key belongs to. Without it
-  Google serves the map watermarked and degraded rather than failing outright, so
-  it is easy to miss.
-
-**3. Sending email — the platform currently cannot**
-
-Right now every email UNIFLEET generates is written to a log file and delivered to
-nobody. That affects new-account setup emails, password resets, scheduled report
-digests, and the alerts that tell us the data pipeline has stopped.
+UNIFLEET cannot send email at all right now. Everything it generates — new-account
+setup, password resets, scheduled report digests, and the alerts that warn us the
+data pipeline has stopped — is written to a log file and reaches nobody.
 
 What we need is **permission to relay through UNIMAC's Microsoft 365**, so mail
 comes from `no-reply@unimaccompany.com`. Preferred: an **Exchange Online connector
 authorising this server's IP `8.213.39.81`** — no mailbox, no licence, and no
-password stored on the server. Alternative: a licensed mailbox with SMTP AUTH
-enabled.
+password stored on the server. Alternative: a licensed mailbox with SMTP AUTH.
 
-To be clear about why it has to be your M365 and not a third-party sender:
+It does have to be your M365 rather than an outside service.
 `unimaccompany.com` publishes `v=spf1 include:spf.protection.outlook.com -all`
-with `DMARC p=quarantine`. Any outside provider sending as your domain therefore
-fails SPF and gets quarantined by your own policy — so password-reset emails would
-land in users' spam folders. Relaying through M365 needs no DNS change at all;
-your SPF, DKIM and DMARC records are already correct.
+with `DMARC p=quarantine`, so any third-party sender using your domain fails SPF
+and gets quarantined by your own policy — password-reset emails would go straight
+to spam. Relaying through M365 needs no DNS change at all; your SPF, DKIM and
+DMARC records are already correct.
 
-**4. Would you like a "coming soon" page in the meantime?**
+**2. Google Maps API key**
 
-A suggestion rather than a request. Since the address is publicly reachable but
-the certificate and email aren't ready, we can put a simple holding page on
-`fleet.unimaccompany.com` and keep the live dashboard reachable only from your
-office and ours. Nobody outside would see a login form until everything is
-finished.
+The map is currently running on **our own Google Maps API key** as a temporary
+measure, which means UNIMAC's map usage is being billed to us. That was fine to
+get the system up, but it shouldn't stay that way.
 
-It needs no certificate, takes about fifteen minutes, and is easy to remove the
-day SSL goes in. Happy either way — tell me if you'd prefer it.
+Could you provide a key from a **UNIMAC** Google Cloud project:
 
----
+- **Billing enabled** on the project — without it Google serves the map degraded
+  and watermarked rather than failing outright, so it's easy to miss.
+- **Maps JavaScript API** enabled.
+- The key **restricted to `fleet.unimaccompany.com`** (Credentials → the key →
+  Application restrictions → Websites). This one matters: an unrestricted key can
+  be lifted straight out of the page source by anyone who visits the site, and
+  billed to your project.
 
-**Your login**
+Send me the key and I'll swap it in — one line and a redeploy.
 
-- **Address:** http://fleet.unimaccompany.com
-- **Username:** `[username]`
-- **Password:** I'll send this separately by WhatsApp rather than email.
+**3. SSL / HTTPS — how would you like to do this?**
 
-The account is **read-only** — you'll see every page, every vehicle and every
-report, and you won't be able to change anything by accident.
+Thanks for confirming you'll be adding SSL. I just need to know the mechanics,
+because the two options need different things from us:
 
-Two things worth knowing:
+- **You send us the certificate** — the certificate file, the private key and the
+  intermediate/chain. We install it on nginx on the server, and HTTP becomes a
+  redirect to HTTPS. Nothing else changes.
+- **You terminate it at your end** — on a load balancer, CDN or WAF in front of
+  the server. In that case let me know whether the `fleet.unimaccompany.com` DNS
+  record changes and which addresses should then be allowed to reach the server,
+  and I'll adjust our side to sit behind it.
 
-- Please treat the password as **temporary**. It will cross the network
-  unencrypted until HTTPS is live, so once the certificate is in you should change
-  it — there's a **Change Password** option in the menu under your name, top right.
-- Your browser will warn that the site is "Not secure". That is expected until the
-  certificate is installed, and it is exactly what item 1 above is about.
+Either is fine by us. Two things to check whichever way you go:
 
-Happy to walk you through it on a call if that's easier than clicking around.
+- **Does the certificate cover `fleet.unimaccompany.com`?** A wildcard
+  `*.unimaccompany.com` does. One issued only for `unimaccompany.com` and
+  `www.unimaccompany.com` does **not**, and browsers would warn on every visit.
+- **Who tracks the expiry and renews it?** Happy to take that on if you'd prefer
+  — I just don't want to assume it.
+
+**4. Optional — a "coming soon" page in the meantime**
+
+If you'd rather the site weren't publicly visible until SSL and email are
+finished, we can put a simple holding page on the address so nobody outside can
+see it or log in, while you and I keep full access. About fifteen minutes to set
+up, and removed the day the certificate goes in.
+
+Worth saying clearly though: **the data collection is already running and is
+unaffected either way.** The system has been recording positions, trips and alerts
+continuously, and that history keeps building whether or not a holding page is up.
+That's the part I'd most like you to look at now — the live data, and whether it
+matches what you'd expect from your fleet.
+
+Your call, happy either way.
 
 Thanks,
 
 Hussein Hammoud
 Cedars Technology
-
----
-
-*One small separate item, same security group: there's a default rule allowing RDP
-(TCP 3389) from `0.0.0.0/0`. The server is Ubuntu and nothing listens on that
-port, so it isn't a live risk — it came in with Alibaba's default template rather
-than from anything we requested. Worth removing while you're in there.*
 
 ## Copy to here
