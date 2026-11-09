@@ -4,8 +4,10 @@
 **From:** Hussein Hammoud, Cedars Technology
 **Drafted:** 2026-11-09
 **Status:** draft, not sent
-**Supersedes:** `IT-EMAIL-SSL.md` (SSL-only draft, 2026-11-08). If that one was
-already sent, cut section 2 down to "following up on my email of 8 November".
+**Supersedes:** `IT-EMAIL-SSL.md` (SSL-only draft, 2026-11-08) — **that draft was
+never sent**, so this is the first written contact with IT about SSL. Section 1 is
+worded accordingly: it acknowledges that they offered the certificate verbally
+rather than implying we have chased it before.
 
 **Internal notes — delete before sending:**
 
@@ -55,14 +57,14 @@ handing this over to UNIMAC's users.
 
 ---
 
-**1. SSL / HTTPS — where are we?**
+**1. SSL / HTTPS — the four details we need from you**
 
-This is the one holding everything else up. Until the certificate is in place the
-dashboard is served over plain HTTP, which means every password typed into it
-crosses the network readable. That is why we have not created any UNIMAC user
-accounts yet.
+Thanks for confirming you'll be adding SSL for the domain. This is the item
+holding everything else up: until the certificate is in place the dashboard is
+served over plain HTTP, which means every password typed into it crosses the
+network readable. That is why we have not created any UNIMAC user accounts yet.
 
-Four details we need before we can install it:
+Four things we need before we can install it, whichever way you're going:
 
 - **Where does the certificate terminate** — on the server (send us the
   certificate, the private key and the intermediate/chain and we'll install it on
