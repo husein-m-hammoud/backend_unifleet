@@ -239,11 +239,35 @@ cd ~/Desktop/my-project/unifleet/backend && ./deploy/push-frontend.sh
 
 ```bash
 # backend, on the server
-cd /var/www/unifleet/backend && ./deploy/deploy.sh
+sudo -u unifleet -H bash -c 'cd /var/www/unifleet/backend && ./deploy/deploy.sh'
 
-# frontend, from your workstation
+# frontend, from your workstation (needs Node >= 18; see the toolchain note below)
 ./deploy/push-frontend.sh
 ```
+
+**Run it exactly like that — the two obvious shortcuts both fail.**
+
+- `./deploy/deploy.sh` **as root is refused by the script itself.** Root would
+  leave root-owned files in `storage/` and `bootstrap/cache/` that php-fpm then
+  cannot write, surfacing as a 500 long after the deploy reported success.
+- `sudo su - unifleet` **also fails**, with "This account is currently not
+  available". That is not a broken account: it was created with
+  `--shell /usr/sbin/nologin` (step 3 above) so it cannot be logged into at all.
+  `sudo -u unifleet bash -c '…'` invokes a shell explicitly instead, which does
+  not go through the account's own nologin shell.
+- **`-H` is required, not decoration.** Without it sudo keeps root's
+  `HOME=/root`, so `git fetch` looks for git config and the SSH key there. The
+  repo is cloned over the `git@github-backend:` host alias, which is defined in
+  the service account's `~/.ssh/config` — that must resolve as `unifleet`, i.e.
+  `/var/www/unifleet/.ssh/config`. If a deploy fails at "Fetching code" with an
+  unresolved `github-backend` host or a key permission error, that config/key is
+  in the wrong home; move it to `/var/www/unifleet/.ssh` owned by
+  `unifleet:unifleet` (dir 700, files 600). **Do not work around it by fetching
+  as root** — that leaves root-owned objects in `.git` and breaks every
+  subsequent deploy.
+
+The script also runs `git merge --ff-only origin/main`, so push your commits
+before deploying; it fails loudly rather than merging anything itself.
 
 `deploy.sh` puts the app in maintenance mode while it migrates. **Every route
 returns 503 during that window, including `/api/health`, so the uptime monitor
