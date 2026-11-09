@@ -3,7 +3,9 @@
 **To:** UNIMAC IT
 **From:** Hussein Hammoud, Cedars Technology
 **Drafted:** 2026-11-08
-**Status:** draft, not sent
+**Status:** SUPERSEDED by `IT-EMAIL-FOLLOWUP.md` (2026-11-09), which folds this
+SSL ask into a single email alongside the Maps key, SMTP, the go-live notice and
+the coming-soon offer. Keep this file only as the record of what was asked first.
 
 **Internal notes — delete before sending, these are not for IT:**
 
