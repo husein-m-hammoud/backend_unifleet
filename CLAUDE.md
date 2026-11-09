@@ -23,8 +23,8 @@
 > in the `users` table), NOT per-provider Safee login. The provider picker was removed. An admin
 > account (`is_admin`) sees **all providers merged**. Default admin: **`admin` / `admin`**. See §10.
 
-> **⚠️ User roles & permissions (session 10, 2026-08-07 — Phase 3 BUILT):** `users.role` = **owner** |
-> **admin** | **user** (source of truth; `is_admin` kept synced = owner|admin so existing manager gates
+> **⚠️ User roles & permissions (session 10, 2026-08-07 — Phase 3 BUILT; **`support` added 2026-11-09, see §12 session 17**):** `users.role` = **owner** |
+> **admin** | **support** | **user** (source of truth; `is_admin` kept synced = owner|admin so existing manager gates
 > still work). **owner** = super-account (only owners manage owner/admin rows; last active owner protected;
 > the seeded `admin` account is now owner). **admin** = manages regular users, sees all vehicles, manages
 > zones/sites. **user** = scoped: sees only vehicles in granted zones — `vehicleQuery()` →
@@ -651,6 +651,17 @@ Every vehicle/driver/site/alert/dashboard query funnels through `$user->vehicleQ
 ---
 
 ## 12. Pending / Open Items
+
+### Done (session 17 — 2026-11-09, `support` role for the UNIMAC helpdesk)
+- [x] **Fourth role `support`** — full read visibility, zero administrative power. **No migration needed:** `users.role` is a plain `string` column with no enum/check constraint, so the value is accepted as-is; only `UserController::ROLES` gates it.
+- [x] **The design rule that makes this safe: `support` is deliberately NOT in `isManager()`.** Every administrative write in the app gates on `isManager()` or the `manager` middleware, so leaving support out means **all of those exclude it automatically** rather than each one needing to learn about a new role. New helpers instead: **`isSupport()`** and **`seesWholeFleet()`** (= owner|admin|support).
+- [x] **What changed, and only this:** `canSeeAllZones()` → `seesWholeFleet() || all_zones` (so `vehicleQuery()` returns the whole fleet); `EnsurePageAccess` bypass → `seesWholeFleet()` (so support passes `page:fuel|ai|heatmap|reports`); `ROLES` + the list ordering; `is_support` in both user payloads.
+- [x] **⚠️ `can_edit_vehicles` had to be special-cased.** `store()`/`update()` previously did `role === 'user' ? ($data[...] ?? false) : true` — i.e. **every non-`user` role defaulted to `true`**, which would have silently handed support vehicle-edit rights. Now a `match` sets `support => false`. **Verified by sending `can_edit_vehicles: true` in a real create request: stored as false.**
+- [x] **Support reads ALL saved reports**, not just its own (`User::canSeeAllReports()`, applied through the new `ReportController::visibleReports()` so `index()` and `show()` cannot drift apart and expose a snapshot through one route but not the other). **This is the one place support sees MORE than an admin** — reports are otherwise private to `created_by`, managers included. Asked for explicitly ("all reports"); flip `canSeeAllReports()` to `isSupport() || isManager()` if the asymmetry is unwanted.
+- [x] **Resolving alerts works without any change** — `POST /alerts/{id}/resolve` was never manager-gated, so the helpdesk's main action was already open. Verified (and the test alert restored to unresolved afterwards).
+- **VERIFIED LIVE over real HTTP, 20/20** (`artisan serve` + curl). Allowed: `/auth/me`, `/dashboard`, `/vehicles` (**218 of 218**), `/vehicles/live`, `/vehicles/fuel`, `/analytics/insights`, `/analytics/heatmap`, `/reports`, **another user's `/reports/{id}`**, `/alerts`, `/settings` (read), `/zones` (read). Blocked 403: `GET|POST /users`, `PUT /settings/{key}`, `POST /contacts`, `PUT /zones/{id}`, `DELETE /vehicles/{id}`, `/admin/diagnostics`, `/admin/diagnostics/logs`. Also verified an **owner creating a support account through the API** (201, `is_manager:false`, `is_support:true`, `can_edit_vehicles:false`, `vehicles_count:218`). All test rows deleted (user count back to 7, 957 open alerts intact).
+- **Permission summary:** sees every page except Zones / Contacts / Users / Settings / System · sees all 218 vehicles unscoped · reads all reports and can generate new ones · can resolve alerts · cannot create/edit/delete users, zones, sites, contacts, settings or vehicles · no diagnostics access.
+- **An admin can manage support accounts** (`ensureCanManageRole` already allowed anything that isn't owner/admin — no change needed).
 
 ### Done (session 16 — 2026-11-08, self-service password change)
 - [x] **`POST /api/auth/password`** (`AuthController::changePassword`) — the gap it closes: a `role=user` account previously had **no way at all** to change its own password. `UserController::changePassword` is manager-gated, and `forgot-password` → `reset-password` needs working outbound mail (`MAIL_MAILER=log`, so it reaches nobody). A provisioned user was stuck permanently with the generated password we emailed them — the one most likely to have been exposed in transit.

@@ -193,6 +193,7 @@ class AuthController extends Controller
             'status'            => $user->status,
             'is_owner'          => $user->isOwner(),
             'is_manager'        => $user->isManager(),
+            'is_support'        => $user->isSupport(),
             'allowed_pages'     => $user->allowed_pages ?? [],
             'can_edit_vehicles' => $user->canEditVehicles(),
             'vehicles_count'    => $user->vehicleQuery()->count(),

@@ -64,18 +64,58 @@ class User extends Authenticatable
     }
 
     /**
-     * Whether this account sees every zone/vehicle: any manager, or a scoped
-     * `user` explicitly granted "access to all zones".
+     * UNIMAC helpdesk account. Full read visibility of the fleet and every
+     * non-administrative page, but NOT a manager: it cannot touch users, zones,
+     * sites, contacts or settings, and cannot delete or edit vehicles.
+     *
+     * Deliberately kept OUT of isManager(). Every administrative write in the
+     * app gates on isManager() (or the `manager` middleware), so leaving support
+     * out of it means those gates exclude support automatically rather than each
+     * one needing to remember a new role.
+     */
+    public function isSupport(): bool
+    {
+        return $this->role === 'support';
+    }
+
+    /** Roles that are never zone-scoped: they see every vehicle in the fleet. */
+    public function seesWholeFleet(): bool
+    {
+        return in_array($this->role, ['owner', 'admin', 'support'], true);
+    }
+
+    /**
+     * Whether this account sees every zone/vehicle: an unscoped role, or a
+     * scoped `user` explicitly granted "access to all zones".
      */
     public function canSeeAllZones(): bool
     {
-        return $this->isManager() || (bool) $this->all_zones;
+        return $this->seesWholeFleet() || (bool) $this->all_zones;
     }
 
-    /** Managers may always edit vehicles; scoped users need the explicit grant. */
+    /**
+     * Managers may always edit vehicles; scoped users need the explicit grant.
+     * Support is read-only, and UserController forces its column to false, so it
+     * falls through to false here.
+     */
     public function canEditVehicles(): bool
     {
         return $this->isManager() || (bool) $this->can_edit_vehicles;
+    }
+
+    /**
+     * Whether this account reads every saved report or only its own.
+     *
+     * Reports are normally private to their creator (`reports.created_by`), and
+     * that includes managers. Support is the one exception: a helpdesk agent
+     * answering "what did last week's report say" cannot regenerate someone
+     * else's snapshot, so they read all of them. This is deliberately the one
+     * place where support sees MORE than an admin - change it here if that
+     * asymmetry is unwanted, or widen it to isManager() for consistency.
+     */
+    public function canSeeAllReports(): bool
+    {
+        return $this->isSupport();
     }
 
     /** Zones granted directly to this user. */

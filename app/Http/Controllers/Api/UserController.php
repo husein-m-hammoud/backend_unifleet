@@ -28,7 +28,7 @@ class UserController extends Controller
      */
     public const GRANTABLE_PAGES = ['dashboard', 'map', 'vehicles', 'alerts', 'ai', 'reports'];
 
-    private const ROLES = ['owner', 'admin', 'user'];
+    private const ROLES = ['owner', 'admin', 'support', 'user'];
 
     /** GET /api/users — list all accounts with their grants. */
     public function index(Request $request): JsonResponse
@@ -36,7 +36,7 @@ class UserController extends Controller
         $this->ensureManager($request);
 
         $users = User::with(['grantedZones:id,name,site_id', 'grantedSites:id,name'])
-            ->orderByRaw("array_position(ARRAY['owner','admin','user']::text[], role)")
+            ->orderByRaw("array_position(ARRAY['owner','admin','support','user']::text[], role)")
             ->orderBy('name')
             ->get();
 
@@ -65,7 +65,13 @@ class UserController extends Controller
         $user->status            = $data['status'] ?? 'active';
         $user->is_admin          = in_array($data['role'], ['owner', 'admin'], true);
         $user->allowed_pages     = $data['role'] === 'user' ? ($data['allowed_pages'] ?? []) : null;
-        $user->can_edit_vehicles = $data['role'] === 'user' ? ($data['can_edit_vehicles'] ?? false) : true;
+        // Support is read-only, so it must NOT pick up the manager default of
+        // true here - only owner/admin may edit vehicles outright.
+        $user->can_edit_vehicles = match ($data['role']) {
+            'user'    => $data['can_edit_vehicles'] ?? false,
+            'support' => false,
+            default   => true,
+        };
         $user->all_zones         = $data['role'] === 'user' ? ($data['all_zones'] ?? false) : false;
         $user->save();
 
@@ -151,7 +157,11 @@ class UserController extends Controller
         $user->status         = $data['status'] ?? $user->status;
         $user->is_admin       = in_array($data['role'], ['owner', 'admin'], true);
         $user->allowed_pages  = $data['role'] === 'user' ? ($data['allowed_pages'] ?? []) : null;
-        $user->can_edit_vehicles = $data['role'] === 'user' ? ($data['can_edit_vehicles'] ?? false) : true;
+        $user->can_edit_vehicles = match ($data['role']) {   // see store() - support stays read-only
+            'user'    => $data['can_edit_vehicles'] ?? false,
+            'support' => false,
+            default   => true,
+        };
         $user->all_zones      = $data['role'] === 'user' ? ($data['all_zones'] ?? false) : false;
 
         if (! empty($data['password'])) {
@@ -262,6 +272,7 @@ class UserController extends Controller
             'status'            => $u->status,
             'is_owner'          => $u->isOwner(),
             'is_manager'        => $u->isManager(),
+            'is_support'        => $u->isSupport(),
             'allowed_pages'     => $u->allowed_pages ?? [],
             'can_edit_vehicles' => $u->canEditVehicles(),
             'all_zones'         => (bool) $u->all_zones,

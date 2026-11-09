@@ -17,11 +17,14 @@ class ReportController extends Controller
     private const TYPES = ['daily', 'weekly', 'monthly', 'driver_safety'];
 
     /**
-     * GET /api/reports — the caller's saved reports (newest first).
+     * GET /api/reports — saved reports, newest first.
+     *
+     * The caller's own, except for a support (helpdesk) account, which reads
+     * every saved report - see User::canSeeAllReports() for why.
      */
     public function index(Request $request): JsonResponse
     {
-        $reports = Report::where('created_by', $request->user()->id)
+        $reports = $this->visibleReports($request)
             ->latest('generated_at')
             ->limit(100)
             ->get()
@@ -67,11 +70,12 @@ class ReportController extends Controller
     }
 
     /**
-     * GET /api/reports/{id} — a saved snapshot's full JSON (owner only).
+     * GET /api/reports/{id} — a saved snapshot's full JSON. Its creator only,
+     * except for support, which reads every report (see index()).
      */
     public function show(Request $request, int $id): JsonResponse
     {
-        $report = Report::where('created_by', $request->user()->id)->findOrFail($id);
+        $report = $this->visibleReports($request)->findOrFail($id);
 
         return response()->json([
             'report'  => $this->summary($report),
@@ -80,6 +84,20 @@ class ReportController extends Controller
     }
 
     /* ── Helpers ─────────────────────────────────────────────────────────── */
+
+    /**
+     * The reports this caller may read. One place, so index() and show() cannot
+     * drift apart and quietly expose a snapshot through one route but not the
+     * other.
+     */
+    private function visibleReports(Request $request)
+    {
+        $user = $request->user();
+
+        return $user->canSeeAllReports()
+            ? Report::query()
+            : Report::where('created_by', $user->id);
+    }
 
     private function summary(Report $r): array
     {
