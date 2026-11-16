@@ -138,6 +138,11 @@ protects it. Email is fine.
 
 Once yours is live I'll disable ours.
 
+**I've written the whole thing up click-by-click** — account setup, the billing
+form, the two APIs, the restriction, and what the failure modes look like if a
+step gets missed — so it can be handed to whoever ends up doing it. It's
+attached. About 30 minutes end to end.
+
 **3. SSL / HTTPS — how would you like to do this?**
 
 Thanks for confirming you'll be adding SSL. I just need to know the mechanics,
