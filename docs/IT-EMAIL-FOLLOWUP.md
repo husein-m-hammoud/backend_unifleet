@@ -12,6 +12,14 @@ this is the first written contact with IT about SSL.
 - Placeholders: **`[Name]`**, **`[username]`**, **`[password]`**.
 - **The account must be `admin`, not `support`.** The email tells them they can
   create users, and only owner/admin can. A read-only support account cannot.
+- **The Maps section now answers his "should it be a corporate account?"
+  question** (yes — and that it needs no Workspace licence), and adds two things
+  the earlier version was missing: the **Geocoding API** must be enabled too, or
+  every place name in the app falls back to raw lat/lon; and the referrer
+  restriction needs **both** the `http://` and `https://` entries, or the map
+  breaks either now or the day the certificate lands. It also states plainly
+  that IT cannot apply the key themselves — it is compiled into the bundle at
+  build time, so they send it and we redeploy.
 - **The Maps section changed meaning.** Production is currently running on
   **your own** Google Maps API key, so UNIMAC's map usage is billed to you right
   now. The ask is therefore for *their* key on *their* billing-enabled project —
@@ -79,17 +87,56 @@ The map is currently running on **our own Google Maps API key** as a temporary
 measure, which means UNIMAC's map usage is being billed to us. That was fine to
 get the system up, but it shouldn't stay that way.
 
-Could you provide a key from a **UNIMAC** Google Cloud project:
+To answer your question: **yes, this should sit on a UNIMAC account rather than
+an individual's.** Not for licensing reasons — Google Cloud is free to sign up
+for and this needs no Google Workspace subscription — but because whoever owns
+the project owns the billing and is the only one who can rotate the key or raise
+quota later. If it's created on a personal Google account and that person moves
+on, nobody can get back into it and the map eventually stops. Two ways to do it,
+both fine by us:
+
+- **Quickest:** sign up at `console.cloud.google.com` using a UNIMAC address —
+  Google accepts non-Gmail addresses, so `unimaccompany.com` works directly, and
+  it doesn't affect your Microsoft 365 mail in any way. Worth using a shared
+  address rather than one person's, so the billing and verification mail isn't
+  sitting in a single inbox.
+- **If you'd rather manage it properly:** **Cloud Identity Free** (no licence
+  cost) plus a DNS TXT record to verify `unimaccompany.com` gives you a real
+  Google Cloud organisation, with the project owned by the company rather than
+  by a user account. More setup, but it's the version that survives staff
+  changes.
+
+Whichever you pick, what the key needs:
 
 - **Billing enabled** on the project — without it Google serves the map degraded
-  and watermarked rather than failing outright, so it's easy to miss.
-- **Maps JavaScript API** enabled.
-- The key **restricted to `fleet.unimaccompany.com`** (Credentials → the key →
-  Application restrictions → Websites). This one matters: an unrestricted key can
-  be lifted straight out of the page source by anyone who visits the site, and
-  billed to your project.
+  and watermarked rather than failing outright, so it's easy to miss. Usage at
+  our scale is small, but a monthly budget alert on the billing account is worth
+  setting while you're in there.
+- **Two APIs enabled: "Maps JavaScript API" and "Geocoding API".** The second is
+  easy to forget and isn't optional — it's what turns coordinates into place
+  names across the alerts, trips and vehicle screens. Without it those screens
+  fall back to showing raw latitude/longitude.
+- The key **restricted to our hostname** (Credentials → the key → Application
+  restrictions → Websites). This one matters: an unrestricted key can be lifted
+  straight out of the page source by anyone who visits the site, and billed to
+  your project. Please add **both** of these entries:
+  - `http://fleet.unimaccompany.com/*`
+  - `https://fleet.unimaccompany.com/*`
 
-Send me the key and I'll swap it in — one line and a redeploy.
+  Both, because the site is on HTTP until the certificate lands (item 3). With
+  only the HTTPS entry the map breaks now; with only the HTTP entry it breaks the
+  day SSL goes in.
+- Also under **API restrictions**, limit the key to those same two APIs, so it
+  can't be used against anything else on the project.
+
+Send me the key and I'll swap it in — it's compiled into the site when we build
+it, so it's a one-line change and a redeploy on our side, about five minutes.
+There's nothing for you to install or configure on the server. And to be clear
+the key isn't a password — it's visible in the page source of any site that uses
+it, which is exactly why the hostname restriction above is the thing that
+protects it. Email is fine.
+
+Once yours is live I'll disable ours.
 
 **3. SSL / HTTPS — how would you like to do this?**
 
