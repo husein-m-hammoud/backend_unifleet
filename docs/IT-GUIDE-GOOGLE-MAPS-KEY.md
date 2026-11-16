@@ -14,6 +14,14 @@ version, either pasted below that item or attached.
   allowances in 2025, and has adjusted the tiers since. The numbers in §7 are
   stated as approximate and the guide tells them to confirm on Google's page —
   keep it that way rather than quoting a figure as fact.
+- **Route A had to be clarified after IT read the first version.** They read
+  `gcp-admin@unimaccompany.com` as "create a Gmail account on our domain" and
+  replied that the domain isn't with Google. Route A now separates a Gmail
+  *mailbox* from a Google *account*, says the address only has to be able to
+  receive one email, and gives the fallback of using a person's own work
+  address. The real argument for a company address is stated as **account
+  recovery** — whoever controls the mailbox controls the Google account — which
+  is the part that actually matters and was buried before.
 - The key is **not** a secret (it ships in the page source of every site that
   uses it). Said twice on purpose: IT people often try to handle it as a
   credential, which leads to them refusing to email it and nothing moving for a
@@ -72,22 +80,49 @@ Two ways to do it. Either is fine by us — pick on how much you want to manage.
 
 ### Route A — quickest (about 5 minutes)
 
-Create a Google account **using a UNIMAC email address**. Google accepts
-non-Gmail addresses, so `unimaccompany.com` works directly; you are not creating
-a Gmail mailbox, just a Google login that happens to use your address.
+**First, to clear up the most common confusion here: this is not a Gmail
+account, and your domain does not move to Google.** Two different things get
+mixed up:
+
+- A **Gmail mailbox** means Google hosts your email. That would require moving
+  the domain. **We are not doing that**, and nothing below changes your DNS, your
+  MX records or your Microsoft 365 mail.
+- A **Google account** is just a login. Google lets you create one using an email
+  address you already have, wherever it is hosted. Google sends one verification
+  code to it, and after that the address is simply the username you sign in to
+  the console with. No mailbox is created at Google.
+
+So the only requirement is that the address is a **real, working mailbox that can
+receive one email**.
 
 1. Go to **accounts.google.com/signup**
 2. Choose **"Use my existing email instead"** (the link is below the username
    field — Google moves it around, but it is always on that step)
-3. Enter a **shared** UNIMAC address, e.g. `gcp-admin@unimaccompany.com` or
-   `it@unimaccompany.com`
+3. Enter a UNIMAC address — e.g. `gcp-admin@unimaccompany.com`. **If that
+   mailbox doesn't exist yet**, either create it in Microsoft 365 as a shared
+   mailbox first (2 minutes), or just use your own `@unimaccompany.com` address,
+   which works immediately with nothing to set up
 4. Google emails a verification code to that address — enter it
 
-**Please use a shared address, not a person's.** All the billing notices, quota
-warnings and recovery mail go there. In a personal mailbox it becomes invisible
-to everyone else the moment that person is on leave or leaves the company.
+A **shared** mailbox is better, because the billing notices and quota warnings
+then land somewhere more than one person can see rather than in one inbox during
+someone's leave. But a person's work address is fine too, and here is the part
+that actually matters:
+
+**The reason this needs a UNIMAC address is account recovery, not the mailbox.**
+Google sends password recovery to that address. So as long as it ends in
+`@unimaccompany.com`, UNIMAC controls the Google account — because UNIMAC
+controls the mailbox. If that person leaves, IT takes the mailbox over and
+recovers the account. That is exactly what breaks with a personal `@gmail.com`
+address: UNIMAC cannot recover it, and the project leaves with the person.
+
+Any `@unimaccompany.com` address works. Just not a personal Gmail.
 
 ### Route B — properly IT-managed (about 45 minutes, including DNS)
+
+*Optional — skip this if route A is done. This is the only part of the guide
+that touches DNS, and even here the domain stays with Microsoft: it adds one TXT
+record for proof of ownership and does not change mail routing.*
 
 **Cloud Identity Free** gives you a real Google Cloud *organisation* for
 `unimaccompany.com`: projects are owned by the company rather than by a user
