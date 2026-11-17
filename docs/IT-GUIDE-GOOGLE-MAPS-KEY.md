@@ -14,6 +14,13 @@ version, either pasted below that item or attached.
   allowances in 2025, and has adjusted the tiers since. The numbers in §7 are
   stated as approximate and the guide tells them to confirm on Google's page —
   keep it that way rather than quoting a figure as fact.
+- **§4 was rewritten on 2026-11-17 after IT hit the KSA reseller wall.** The
+  first version told them to add a company card, which is not possible with a
+  Saudi billing address: Google sells Cloud in KSA only through CNTXT. The
+  Maps-only reseller list is the way through, and the guide now leads with
+  checking whether one of those five already supplies their M365 licences.
+  **The minimum-commitment warning is the important line** — a reseller contract
+  could cost more than the usage, and at that point this is not worth doing.
 - **Route A had to be clarified after IT read the first version.** They read
   `gcp-admin@unimaccompany.com` as "create a Gmail account on our domain" and
   replied that the domain isn't with Google. Route A now separates a Gmail
@@ -161,31 +168,57 @@ A "project" is just a container for the key and its usage.
 
 ---
 
-## 4. Step 3 — enable billing on the project
+## 4. Step 3 — billing: in Saudi Arabia this goes through a reseller
 
 Google will not serve a working map without billing enabled, even when usage is
 inside the free allowance (see §7 — the expected cost here is small or nil).
-This is the step that needs someone with a company card.
 
-1. Open the menu (**☰**, top left) → **Billing**
-2. If there is no billing account yet: **Manage billing accounts** → **Create
-   account**
-3. Give it a name (e.g. `UNIMAC`) and set the **country to Saudi Arabia**
+**This step works differently in KSA, and it is the one that takes time.**
+Google does not sell Cloud directly in Saudi Arabia. When you select **Saudi
+Arabia** as the billing country, the console will not take a card — it tells you
+that Google Cloud partners with **CNTXT** as its exclusive reseller in the
+region, and offers to redirect you there.
 
-   ⚠️ **The country cannot be changed afterwards** — it fixes the currency and
-   the tax treatment. Getting it wrong means creating a second billing account
-   later.
+**You do not need the full CNTXT cloud contract.** That same page carries a note
+which is easy to miss: for **Google Maps Platform only**, you may contract with
+any of Google's authorised Maps resellers. As of November 2026 the console
+listed five:
 
-4. **Account type: Business** (not Individual), then the company name, address
-   and VAT details if asked
-5. Add the payment method — a company card. Google may place a small temporary
-   authorisation on it to verify; it is refunded
-6. Back in **Billing**, confirm the `UNIFLEET` project is **linked** to that
-   billing account. If it shows "This project has no billing account", click
-   **Link a billing account** and pick it
+| Reseller | Maps contact shown by Google |
+|---|---|
+| CNTXT | `maps@cntxt.com` |
+| iSolutions | `maps@isolutions.sa` |
+| OniGroup | `MEABusiness@onigroupglobal.com` |
+| Searce | `googlemaps@searce.com` |
+| SoftwareONE | `maps@g.softwareone.com` |
 
-New Google Cloud accounts are usually offered a free trial credit as well, which
-you can accept or skip — the map works either way.
+UNIFLEET needs Maps only, so any of these is enough.
+
+**Start by checking whether you already have one of them.** Several are large
+Microsoft licensing resellers as well — SoftwareONE in particular. If one of
+them already supplies your Microsoft 365 licences, this is very likely "add
+Maps to the existing account" rather than onboarding a new supplier, which is
+usually the difference between days and weeks of procurement.
+
+What to ask them for:
+
+> A Google Maps Platform account for one internal web application. Two APIs
+> only — Maps JavaScript API and Geocoding API. Expected usage is very low: a
+> small number of internal users on a single site. Please confirm whether there
+> is any **minimum commitment or setup fee**.
+
+⚠️ **Ask about the minimum commitment explicitly.** Expected usage here is free
+or a few dollars a month (§7). A reseller contract with a monthly minimum could
+easily cost more than the usage it covers — if that is the case, say so and we
+will reconsider the approach rather than sign up to it by default.
+
+Once the reseller has set the billing account up and linked it, confirm in
+**Billing** that the `UNIFLEET` project shows as linked. If it says "This
+project has no billing account", click **Link a billing account** and pick it.
+
+*Note: the country on a billing account cannot be changed after it is created,
+and it is the country of the contracting entity — so this is determined by where
+UNIMAC is registered, not by a setting that can be worked around.*
 
 ---
 
