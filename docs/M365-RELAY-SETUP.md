@@ -1,7 +1,8 @@
 # Sending mail through UNIMAC's Microsoft 365
 
-**Status:** IT asked on 2026-11-25 what they need to do. Blocked on the port
-test in §1 before we can tell them *which* of the two options to set up.
+**Status:** 2026-11-25 — port test done, **option A (SMTP AUTH, port 587) is
+the path**. Option B is not available: outbound 25 is blocked. Waiting on IT to
+create the mailbox, enable Authenticated SMTP and send the password.
 **Background and the final `.env` values:** `.env.example`, the Microsoft 365
 section.
 
@@ -34,7 +35,23 @@ timeout 5 bash -c 'cat < /dev/null > /dev/tcp/smtp.office365.com/587' \
   && echo "587 OPEN" || echo "587 BLOCKED"
 ```
 
-Expected on Alibaba Cloud: 25 blocked, 587 open. Hope to be wrong.
+**Result, run on the server 2026-11-25:**
+
+```
+25  BLOCKED      -> option B is not available
+587 OPEN         -> option A works
+```
+
+So Alibaba Cloud does block outbound 25 here, as expected. Unblocking it is a
+support request to Alibaba that is usually refused in this region and slow when
+it is not, so **option A is the decision** unless something changes. Do not
+re-propose the connector without re-running the test first.
+
+**The cost of that:** option A needs a licensed mailbox, and it puts a working
+mailbox password in `.env` on an internet-facing server. That is precisely what
+option B avoids, and it is forced on us by the port block, not chosen. Worth
+stating plainly to IT so the licence cost and the stored credential are both
+their informed decision.
 
 ---
 
